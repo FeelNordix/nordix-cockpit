@@ -1,0 +1,144 @@
+"use client";
+
+import { FormEvent, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { customerDetailsDefaults } from "@/lib/customerDefaults";
+import { getNextOfferNumber, saveCustomer } from "@/lib/customerStorage";
+import type { Customer } from "@/types/customer";
+
+const emptyForm = {
+  firstName: "",
+  lastName: "",
+  companyName: "",
+  email: "",
+  phone: "",
+  destination: "",
+  travelPeriod: "",
+  status: "Nieuwe aanvraag",
+  notes: ""
+};
+
+export default function NewCustomerForm() {
+  const router = useRouter();
+  const [form, setForm] = useState(emptyForm);
+
+  function updateField(field: keyof typeof emptyForm, value: string) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function addCustomer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const customer: Customer = {
+      id: crypto.randomUUID(),
+      ...customerDetailsDefaults,
+      offerNumber: getNextOfferNumber(),
+      firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(),
+      companyName: form.companyName.trim() || "Particulier",
+      email: form.email.trim(),
+      phone: form.phone.trim() || "Nog niet ingevuld",
+      destination: form.destination.trim() || "Nog te bepalen",
+      travelPeriod: form.travelPeriod.trim() || "Nog te bepalen",
+      status: form.status as Customer["status"],
+      notes: form.notes.trim() || "Nog geen notities."
+    };
+
+    saveCustomer(customer);
+    router.push(`/customers/${customer.id}`);
+  }
+
+  return (
+    <div className="space-y-6">
+      <Link
+        href="/customers"
+        className="inline-flex rounded-md border border-nordix-mist bg-white px-3 py-2 text-sm font-medium text-nordix-ink shadow-sm transition hover:border-nordix-fjord hover:text-nordix-pine"
+      >
+        Terug naar klanten
+      </Link>
+
+      <section className="rounded-lg border border-nordix-mist bg-white p-6 shadow-sm">
+        <p className="text-sm font-semibold uppercase text-nordix-pine">
+          Nieuwe aanvraag
+        </p>
+        <h2 className="mt-2 text-3xl font-semibold text-nordix-ink">
+          Nieuwe klant toevoegen
+        </h2>
+
+        <form onSubmit={addCustomer} className="mt-6 grid gap-4 md:grid-cols-2">
+          <TextField label="Voornaam" value={form.firstName} onChange={(value) => updateField("firstName", value)} required />
+          <TextField label="Achternaam" value={form.lastName} onChange={(value) => updateField("lastName", value)} required />
+          <TextField label="Bedrijfsnaam" value={form.companyName} onChange={(value) => updateField("companyName", value)} />
+          <TextField label="E-mail" type="email" value={form.email} onChange={(value) => updateField("email", value)} required />
+          <TextField label="Telefoonnummer" value={form.phone} onChange={(value) => updateField("phone", value)} />
+          <TextField label="Gewenste bestemming" value={form.destination} onChange={(value) => updateField("destination", value)} />
+          <TextField label="Reisperiode" value={form.travelPeriod} onChange={(value) => updateField("travelPeriod", value)} />
+
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Status</span>
+            <select
+              value={form.status}
+              onChange={(event) => updateField("status", event.target.value)}
+              className="mt-1 w-full rounded-md border border-nordix-mist bg-white px-3 py-2 text-sm outline-none transition focus:border-nordix-fjord focus:ring-2 focus:ring-nordix-fjord/30"
+            >
+              <option>Nieuwe aanvraag</option>
+              <option>Intake gepland</option>
+              <option>Reisvoorstel</option>
+            </select>
+          </label>
+
+          <label className="block md:col-span-2">
+            <span className="text-sm font-medium text-slate-700">
+              Opmerkingen/notities
+            </span>
+            <textarea
+              value={form.notes}
+              onChange={(event) => updateField("notes", event.target.value)}
+              className="mt-1 min-h-32 w-full rounded-md border border-nordix-mist px-3 py-2 text-sm outline-none transition focus:border-nordix-fjord focus:ring-2 focus:ring-nordix-fjord/30"
+              placeholder="Bijv. wensen, gezinssamenstelling, budget of praktische aandachtspunten."
+            />
+          </label>
+
+          <div className="md:col-span-2">
+            <button
+              type="submit"
+              className="rounded-md bg-nordix-pine px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-nordix-pine/90"
+            >
+              Opslaan
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+type TextFieldProps = {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  required?: boolean;
+  type?: string;
+};
+
+function TextField({
+  label,
+  value,
+  onChange,
+  required = false,
+  type = "text"
+}: TextFieldProps) {
+  return (
+    <label className="block">
+      <span className="text-sm font-medium text-slate-700">{label}</span>
+      <input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1 w-full rounded-md border border-nordix-mist px-3 py-2 text-sm outline-none transition focus:border-nordix-fjord focus:ring-2 focus:ring-nordix-fjord/30"
+        required={required}
+      />
+    </label>
+  );
+}
