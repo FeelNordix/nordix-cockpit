@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { createSupabaseClient } from "@/lib/supabaseClient";
 
 const navigation = [
   { href: "/", label: "Dashboard" },
@@ -11,6 +12,18 @@ const navigation = [
 
 export default function MainNavigation() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  if (pathname === "/login") {
+    return null;
+  }
+
+  async function logout() {
+    const supabase = createSupabaseClient();
+    await supabase.auth.signOut();
+    router.replace("/login");
+    router.refresh();
+  }
 
   return (
     <nav aria-label="Hoofdnavigatie" className="flex gap-2">
@@ -32,6 +45,13 @@ export default function MainNavigation() {
           </Link>
         );
       })}
+      <button
+        type="button"
+        onClick={logout}
+        className="rounded-md px-3 py-2 text-sm font-medium text-white transition hover:bg-white/10 hover:text-white"
+      >
+        Uitloggen
+      </button>
     </nav>
   );
 }

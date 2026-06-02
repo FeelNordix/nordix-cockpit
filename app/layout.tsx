@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import AuthGuard from "@/components/AuthGuard";
 import LogoMark from "@/components/LogoMark";
 import MainNavigation from "@/components/MainNavigation";
 import "./globals.css";
@@ -35,7 +36,9 @@ export default function RootLayout({
             <MainNavigation />
           </header>
 
-          <main className="flex-1 py-8">{children}</main>
+          <main className="flex-1 py-8">
+            <AuthGuard>{children}</AuthGuard>
+          </main>
         </div>
       </body>
     </html>
