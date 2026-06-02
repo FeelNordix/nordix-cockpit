@@ -9,6 +9,7 @@ export type Customer = {
   travelPeriod: string;
   status: "Nieuwe aanvraag" | "Intake gepland" | "Reisvoorstel";
   notes: string;
+  brand: Brand;
   offerNumber: string;
   quoteSent: boolean;
   quoteSentDate: string;
@@ -43,6 +44,8 @@ export type Customer = {
   googleReviewLinkSentDate: string;
   travelers: Traveler[];
 };
+
+export type Brand = "Feel Nordix" | "Feel Dutch";
 
 export type Traveler = {
   id: string;

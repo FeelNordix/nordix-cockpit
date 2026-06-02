@@ -1,6 +1,7 @@
-import type { Customer, Traveler } from "@/types/customer";
+import type { Brand, Customer, Traveler } from "@/types/customer";
 
 export const customerDetailsDefaults = {
+  brand: "Feel Nordix" as Brand,
   offerNumber: "",
   quoteSent: false,
   quoteSentDate: "",
@@ -40,7 +41,8 @@ export function normalizeCustomer(customer: Customer) {
   const hasPaymentType = "paymentType" in customer && Boolean(customer.paymentType);
   const normalizedCustomer = {
     ...customerDetailsDefaults,
-    ...customer
+    ...customer,
+    brand: normalizeBrand(customer.brand)
   };
 
   const booleanSafeCustomer = normalizeBooleans({
@@ -50,6 +52,10 @@ export function normalizeCustomer(customer: Customer) {
   const numberedCustomer = withConfirmedNumbers(booleanSafeCustomer);
 
   return withAutomaticWorkflowDates(numberedCustomer, !hasPaymentType);
+}
+
+function normalizeBrand(brand: unknown): Brand {
+  return brand === "Feel Dutch" ? "Feel Dutch" : "Feel Nordix";
 }
 
 function normalizeTravelers(travelers: Customer["travelers"]): Traveler[] {

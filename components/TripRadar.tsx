@@ -96,8 +96,9 @@ export default function TripRadar() {
       </section>
 
       <section className="overflow-hidden rounded-lg border border-nordix-mist bg-white shadow-sm">
-        <div className="hidden grid-cols-[0.8fr_1fr_1.2fr_0.9fr_0.9fr_0.9fr_1fr_1fr] gap-4 border-b border-nordix-mist bg-nordix-snow px-4 py-3 text-sm font-semibold text-slate-700 lg:grid">
+        <div className="hidden grid-cols-[0.8fr_0.8fr_1fr_1.2fr_0.9fr_0.9fr_0.9fr_1fr_1fr] gap-4 border-b border-nordix-mist bg-nordix-snow px-4 py-3 text-sm font-semibold text-slate-700 lg:grid">
           <span>Reisnummer</span>
+          <span>Merk</span>
           <span>Klantnaam</span>
           <span>Reisnaam</span>
           <span>Vertrekdatum</span>
@@ -112,9 +113,10 @@ export default function TripRadar() {
             <Link
               key={row.customerId}
               href={`/customers/${row.customerId}`}
-              className="grid gap-3 px-4 py-4 text-sm transition hover:bg-nordix-snow lg:grid-cols-[0.8fr_1fr_1.2fr_0.9fr_0.9fr_0.9fr_1fr_1fr] lg:items-center"
+              className="grid gap-3 px-4 py-4 text-sm transition hover:bg-nordix-snow lg:grid-cols-[0.8fr_0.8fr_1fr_1.2fr_0.9fr_0.9fr_0.9fr_1fr_1fr] lg:items-center"
             >
               <p className="font-semibold text-nordix-pine">{row.tripNumber}</p>
+              <p className="text-slate-700">{row.brand}</p>
               <p className="font-semibold text-nordix-ink">{row.customerName}</p>
               <p className="text-slate-700">{row.tripName}</p>
               <p className="text-slate-700">{row.departureDate || "-"}</p>

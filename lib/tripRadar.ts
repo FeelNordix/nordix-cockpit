@@ -11,6 +11,7 @@ export type TripFilter =
 
 export type TripRow = {
   customerId: string;
+  brand: string;
   tripNumber: string;
   customerName: string;
   tripName: string;
@@ -24,6 +25,7 @@ export type TripRow = {
 export function getTripRows(customers: Customer[]) {
   return customers.map((customer) => ({
     customerId: customer.id,
+    brand: customer.brand,
     tripNumber: customer.tripNumber || customer.offerNumber || "-",
     customerName: `${customer.firstName} ${customer.lastName}`,
     tripName: customer.tripName || customer.destination || "Nog te bepalen",
@@ -83,6 +85,7 @@ export function searchTripRows(rows: TripRow[], query: string) {
   return rows.filter((row) => {
     return [
       row.customerName,
+      row.brand,
       row.tripNumber,
       row.tripName
     ].some((value) => value.toLowerCase().includes(normalizedQuery));

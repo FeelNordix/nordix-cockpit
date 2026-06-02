@@ -28,7 +28,7 @@ export function getDashboardActionGroups(
     if (customer.status === "Nieuwe aanvraag") {
       newRequests.push({
         id: `${customer.id}-new-request`,
-        text: `Nieuwe aanvraag — ${name}`,
+        text: getActionText(customer, `Nieuwe aanvraag — ${name}`),
         href
       });
     }
@@ -41,7 +41,7 @@ export function getDashboardActionGroups(
     ) {
       todayActions.push({
         id: `${customer.id}-quote-follow-up`,
-        text: `Offerte opvolgen — ${name}`,
+        text: getActionText(customer, `Offerte opvolgen — ${name}`),
         href,
         dueDate: customer.quoteFollowUpDate
       });
@@ -54,7 +54,7 @@ export function getDashboardActionGroups(
     addDatedAction({
       action: {
         id: `${customer.id}-prepare-documents`,
-        text: `Reisdocumenten voorbereiden — ${name}, versturen gepland op ${formatDate(customer.travelDocumentsPlannedSendDate)}`,
+        text: getActionText(customer, `Reisdocumenten voorbereiden — ${name}, versturen gepland op ${formatDate(customer.travelDocumentsPlannedSendDate)}`),
         href,
         dueDate: customer.travelDocumentsPrepareFromDate
       },
@@ -69,7 +69,7 @@ export function getDashboardActionGroups(
     addDatedAction({
       action: {
         id: `${customer.id}-send-documents`,
-        text: `Reisdocumenten versturen — ${name}`,
+        text: getActionText(customer, `Reisdocumenten versturen — ${name}`),
         href,
         dueDate: customer.travelDocumentsPlannedSendDate
       },
@@ -85,7 +85,7 @@ export function getDashboardActionGroups(
       addDatedAction({
         action: {
           id: `${customer.id}-full-payment`,
-          text: `Volledige betaling controleren — ${name}`,
+          text: getActionText(customer, `Volledige betaling controleren — ${name}`),
           href,
           dueDate: customer.fullPaymentDueDate
         },
@@ -100,7 +100,7 @@ export function getDashboardActionGroups(
       addDatedAction({
         action: {
           id: `${customer.id}-deposit-payment`,
-          text: `Aanbetaling controleren — ${name}`,
+          text: getActionText(customer, `Aanbetaling controleren — ${name}`),
           href,
           dueDate: customer.depositDueDate
         },
@@ -115,7 +115,7 @@ export function getDashboardActionGroups(
       addDatedAction({
         action: {
           id: `${customer.id}-final-payment`,
-          text: `Restantbetaling controleren — ${name}`,
+          text: getActionText(customer, `Restantbetaling controleren — ${name}`),
           href,
           dueDate: customer.finalPaymentDueDate
         },
@@ -131,7 +131,7 @@ export function getDashboardActionGroups(
     addDatedAction({
       action: {
         id: `${customer.id}-post-trip-contact`,
-        text: `Contact opnemen na reis — ${name}`,
+        text: getActionText(customer, `Contact opnemen na reis — ${name}`),
         href,
         dueDate: customer.returnDate ? shiftDate(customer.returnDate, 2) : ""
       },
@@ -144,7 +144,7 @@ export function getDashboardActionGroups(
     if (customer.postTripContacted === true && customer.googleReviewLinkSent !== true) {
       todayActions.push({
         id: `${customer.id}-review-link`,
-        text: `Google Review-link sturen — ${name}`,
+        text: getActionText(customer, `Google Review-link sturen — ${name}`),
         href
       });
     }
@@ -155,6 +155,10 @@ export function getDashboardActionGroups(
     nextSevenDays: sortByDueDate(nextSevenDays),
     newRequests: newRequests.sort((a, b) => a.text.localeCompare(b.text))
   };
+}
+
+function getActionText(customer: Customer, text: string) {
+  return customer.brand === "Feel Dutch" ? `Feel Dutch — ${text}` : text;
 }
 
 function addDatedAction({

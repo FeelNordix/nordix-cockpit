@@ -178,7 +178,7 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
               {customer.firstName} {customer.lastName}
             </h2>
             <p className="mt-2 text-sm text-slate-600">
-              {customer.offerNumber || "Nog geen nummer"} - {customer.destination}
+              {customer.offerNumber || "Nog geen nummer"} - {customer.brand} - {customer.destination}
             </p>
           </div>
           <span className="w-fit rounded-md bg-nordix-mist px-3 py-1.5 text-sm font-semibold text-nordix-ink">
@@ -196,10 +196,12 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
           <SummaryItem label="Reis-/offertenummer" value={customer.tripNumber || customer.offerNumber || "-"} />
           <SummaryItem label="Reisnaam" value={customer.tripName || customer.destination || "Nog te bepalen"} />
           <SummaryItem label="Reisperiode" value={customer.travelPeriod || "Nog te bepalen"} />
+          <SummaryItem label="Merk" value={customer.brand} />
           <SummaryItem label="Aantal reizigers" value={`${travelerCount}`} />
         </SectionCard>
 
         <SectionCard title="Nummers">
+          <BrandField value={customer.brand} onChange={(value) => updateField("brand", value)} />
           <TextField label="Offertenummer" value={customer.offerNumber} onChange={(value) => updateField("offerNumber", value)} />
           <TextField label="Reisnummer" value={customer.tripNumber} onChange={(value) => updateField("tripNumber", value)} />
           <TextField label="Factuurnummer" value={customer.invoiceNumber} onChange={(value) => updateField("invoiceNumber", value)} />
@@ -407,6 +409,27 @@ function TextField({
         className="mt-1 w-full rounded-md border border-nordix-mist px-3 py-2 text-sm outline-none transition focus:border-nordix-fjord focus:ring-2 focus:ring-nordix-fjord/30"
         required={required}
       />
+    </label>
+  );
+}
+
+type BrandFieldProps = {
+  value: Customer["brand"];
+  onChange: (value: Customer["brand"]) => void;
+};
+
+function BrandField({ value, onChange }: BrandFieldProps) {
+  return (
+    <label className="block">
+      <span className="text-sm font-medium text-slate-700">Merk</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value as Customer["brand"])}
+        className="mt-1 w-full rounded-md border border-nordix-mist bg-white px-3 py-2 text-sm outline-none transition focus:border-nordix-fjord focus:ring-2 focus:ring-nordix-fjord/30"
+      >
+        <option>Feel Nordix</option>
+        <option>Feel Dutch</option>
+      </select>
     </label>
   );
 }

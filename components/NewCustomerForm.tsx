@@ -16,6 +16,7 @@ const emptyForm = {
   destination: "",
   travelPeriod: "",
   status: "Nieuwe aanvraag",
+  brand: "Feel Nordix",
   notes: ""
 };
 
@@ -42,6 +43,7 @@ export default function NewCustomerForm() {
       destination: form.destination.trim() || "Nog te bepalen",
       travelPeriod: form.travelPeriod.trim() || "Nog te bepalen",
       status: form.status as Customer["status"],
+      brand: form.brand as Customer["brand"],
       notes: form.notes.trim() || "Nog geen notities."
     };
 
@@ -74,6 +76,8 @@ export default function NewCustomerForm() {
           <TextField label="Telefoonnummer" value={form.phone} onChange={(value) => updateField("phone", value)} />
           <TextField label="Gewenste bestemming" value={form.destination} onChange={(value) => updateField("destination", value)} />
           <TextField label="Reisperiode" value={form.travelPeriod} onChange={(value) => updateField("travelPeriod", value)} />
+
+          <BrandField value={form.brand as Customer["brand"]} onChange={(value) => updateField("brand", value)} />
 
           <label className="block">
             <span className="text-sm font-medium text-slate-700">Status</span>
@@ -111,6 +115,27 @@ export default function NewCustomerForm() {
         </form>
       </section>
     </div>
+  );
+}
+
+type BrandFieldProps = {
+  value: Customer["brand"];
+  onChange: (value: Customer["brand"]) => void;
+};
+
+function BrandField({ value, onChange }: BrandFieldProps) {
+  return (
+    <label className="block">
+      <span className="text-sm font-medium text-slate-700">Merk</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value as Customer["brand"])}
+        className="mt-1 w-full rounded-md border border-nordix-mist bg-white px-3 py-2 text-sm outline-none transition focus:border-nordix-fjord focus:ring-2 focus:ring-nordix-fjord/30"
+      >
+        <option>Feel Nordix</option>
+        <option>Feel Dutch</option>
+      </select>
+    </label>
   );
 }
 
