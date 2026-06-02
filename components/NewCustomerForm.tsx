@@ -2,7 +2,6 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { customerDetailsDefaults } from "@/lib/customerDefaults";
 import { getNextOfferNumber, saveCustomer } from "@/lib/customerStorage";
 import { createSupabaseClient } from "@/lib/supabaseClient";
@@ -22,10 +21,11 @@ const emptyForm = {
 };
 
 export default function NewCustomerForm() {
-  const router = useRouter();
   const [form, setForm] = useState(emptyForm);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [savedCustomerId, setSavedCustomerId] = useState("");
 
   function updateField(field: keyof typeof emptyForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -34,6 +34,8 @@ export default function NewCustomerForm() {
   async function addCustomer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage("");
+    setSuccessMessage("");
+    setSavedCustomerId("");
     setIsSaving(true);
 
     const customer: Customer = {
@@ -53,15 +55,20 @@ export default function NewCustomerForm() {
     };
 
     saveCustomer(customer);
+    setSavedCustomerId(customer.id);
 
     try {
       await saveCustomerToSupabase(customer);
-      router.push(`/customers/${customer.id}`);
+      setSuccessMessage("Aanvraag opgeslagen.");
+      setIsSaving(false);
     } catch (error) {
-      setErrorMessage(
+      const message =
         error instanceof Error
           ? error.message
-          : "Nieuwe aanvraag is lokaal opgeslagen, maar Supabase opslaan is mislukt."
+          : "Nieuwe aanvraag is lokaal opgeslagen, maar Supabase opslaan is mislukt.";
+
+      setErrorMessage(
+        message
       );
       setIsSaving(false);
     }
@@ -121,6 +128,11 @@ export default function NewCustomerForm() {
           </label>
 
           <div className="md:col-span-2">
+            {successMessage ? (
+              <p className="mb-3 rounded-md bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+                {successMessage}
+              </p>
+            ) : null}
             {errorMessage ? (
               <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
                 {errorMessage}
@@ -133,6 +145,14 @@ export default function NewCustomerForm() {
             >
               {isSaving ? "Opslaan..." : "Opslaan"}
             </button>
+            {successMessage && savedCustomerId ? (
+              <Link
+                href={`/customers/${savedCustomerId}`}
+                className="ml-3 inline-flex rounded-md border border-nordix-mist bg-white px-4 py-2.5 text-sm font-semibold text-nordix-ink shadow-sm transition hover:border-nordix-fjord hover:text-nordix-pine"
+              >
+                Naar klantdossier
+              </Link>
+            ) : null}
           </div>
         </form>
       </section>
@@ -143,8 +163,9 @@ export default function NewCustomerForm() {
 async function saveCustomerToSupabase(customer: Customer) {
   const supabase = createSupabaseClient();
   const { data: sessionData } = await supabase.auth.getSession();
+  const hasSession = Boolean(sessionData.session);
 
-  if (!sessionData.session) {
+  if (!hasSession) {
     throw new Error(
       "Nieuwe aanvraag is lokaal opgeslagen, maar er is geen actieve Supabase sessie."
     );
