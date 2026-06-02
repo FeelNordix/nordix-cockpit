@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { customerDetailsDefaults } from "@/lib/customerDefaults";
 import { getNextOfferNumber, saveCustomer } from "@/lib/customerStorage";
+import { createSupabaseClient } from "@/lib/supabaseClient";
 import type { Customer } from "@/types/customer";
 
 const emptyForm = {
@@ -23,13 +24,17 @@ const emptyForm = {
 export default function NewCustomerForm() {
   const router = useRouter();
   const [form, setForm] = useState(emptyForm);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
   function updateField(field: keyof typeof emptyForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
-  function addCustomer(event: FormEvent<HTMLFormElement>) {
+  async function addCustomer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setErrorMessage("");
+    setIsSaving(true);
 
     const customer: Customer = {
       id: crypto.randomUUID(),
@@ -48,7 +53,18 @@ export default function NewCustomerForm() {
     };
 
     saveCustomer(customer);
-    router.push(`/customers/${customer.id}`);
+
+    try {
+      await saveCustomerToSupabase(customer);
+      router.push(`/customers/${customer.id}`);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Nieuwe aanvraag is lokaal opgeslagen, maar Supabase opslaan is mislukt."
+      );
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -105,17 +121,82 @@ export default function NewCustomerForm() {
           </label>
 
           <div className="md:col-span-2">
+            {errorMessage ? (
+              <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+                {errorMessage}
+              </p>
+            ) : null}
             <button
               type="submit"
-              className="rounded-md bg-nordix-pine px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-nordix-pine/90"
+              disabled={isSaving}
+              className="rounded-md bg-nordix-pine px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-nordix-pine/90 disabled:cursor-not-allowed disabled:opacity-70"
             >
-              Opslaan
+              {isSaving ? "Opslaan..." : "Opslaan"}
             </button>
           </div>
         </form>
       </section>
     </div>
   );
+}
+
+async function saveCustomerToSupabase(customer: Customer) {
+  const supabase = createSupabaseClient();
+  const { data: sessionData } = await supabase.auth.getSession();
+
+  if (!sessionData.session) {
+    throw new Error(
+      "Nieuwe aanvraag is lokaal opgeslagen, maar er is geen actieve Supabase sessie."
+    );
+  }
+
+  const { data: createdCustomer, error: customerError } = await supabase
+    .from("customers")
+    .insert({
+      id: customer.id,
+      first_name: customer.firstName,
+      last_name: customer.lastName,
+      company_name: customer.companyName,
+      email: customer.email,
+      phone: customer.phone,
+      status: customer.status
+    })
+    .select("id")
+    .single();
+
+  if (customerError || !createdCustomer) {
+    throw new Error(
+      customerError?.message ||
+        "Nieuwe aanvraag is lokaal opgeslagen, maar customers aanmaken is mislukt."
+    );
+  }
+
+  const { data: createdTrip, error: tripError } = await supabase
+    .from("trips")
+    .insert({
+      customer_id: createdCustomer.id,
+      brand: customer.brand,
+      offer_number: customer.offerNumber,
+      destination: customer.destination,
+      travel_period: customer.travelPeriod,
+      trip_name: customer.tripName,
+      quote_sent: customer.quoteSent,
+      quote_confirmed: customer.quoteConfirmed
+    })
+    .select("id")
+    .single();
+
+  if (tripError || !createdTrip) {
+    throw new Error(
+      tripError?.message ||
+        "Nieuwe aanvraag is lokaal opgeslagen, maar trips aanmaken is mislukt."
+    );
+  }
+
+  return {
+    customerId: createdCustomer.id,
+    tripId: createdTrip.id
+  };
 }
 
 type BrandFieldProps = {
