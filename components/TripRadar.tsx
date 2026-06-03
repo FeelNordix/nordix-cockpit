@@ -11,7 +11,6 @@ import {
   type TripFilter
 } from "@/lib/tripRadar";
 import { getAllCustomers } from "@/lib/customerStorage";
-import { mockCustomers } from "@/lib/mockCustomers";
 import { createSupabaseClient } from "@/lib/supabaseClient";
 import type { Customer } from "@/types/customer";
 
@@ -81,7 +80,7 @@ export default function TripRadar() {
   const searchParams = useSearchParams();
   const filterParam = searchParams.get("filter");
   const initialFilter = getFilterValue(filterParam);
-  const [customers, setCustomers] = useState<Customer[]>(mockCustomers);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<TripFilter>(initialFilter);
   const [tripRadarSource, setTripRadarSource] =
@@ -89,10 +88,8 @@ export default function TripRadar() {
   const [supabaseError, setSupabaseError] = useState("");
 
   useEffect(() => {
-    const fallbackCustomers = getAllCustomers();
-
-    setCustomers(fallbackCustomers);
-    setTripRadarSource("Fallback");
+    setCustomers([]);
+    setTripRadarSource("Supabase");
 
     loadTripRadarCustomersFromSupabase()
       .then((supabaseCustomers) => {
@@ -101,6 +98,8 @@ export default function TripRadar() {
         setSupabaseError("");
       })
       .catch((error) => {
+        const fallbackCustomers = getAllCustomers();
+
         setCustomers(fallbackCustomers);
         setTripRadarSource("Fallback");
         setSupabaseError(

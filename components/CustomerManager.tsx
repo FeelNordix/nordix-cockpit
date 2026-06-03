@@ -32,10 +32,14 @@ type SupabaseTripRow = {
   return_date: string | null;
 };
 
+type CustomerManagerSource = "Supabase" | "Fallback";
+
 export default function CustomerManager() {
   const searchParams = useSearchParams();
   const statusFilter = searchParams.get("status");
-  const [customers, setCustomers] = useState<Customer[]>(mockCustomers);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [dataSource, setDataSource] =
+    useState<CustomerManagerSource>("Supabase");
   const [sourceCounts, setSourceCounts] = useState({
     supabase: 0,
     localStorage: 0,
@@ -44,27 +48,36 @@ export default function CustomerManager() {
   const [supabaseError, setSupabaseError] = useState("");
 
   useEffect(() => {
-    const fallbackCustomers = getAllCustomers();
-    const storedCustomers = getStoredCustomers();
-
-    setCustomers(fallbackCustomers);
+    setCustomers([]);
+    setDataSource("Supabase");
     setSourceCounts({
       supabase: 0,
-      localStorage: storedCustomers.length,
-      mock: mockCustomers.length
+      localStorage: 0,
+      mock: 0
     });
 
-    loadCustomersFromSupabase(fallbackCustomers, storedCustomers.length)
-      .then(({ mergedCustomers, supabaseCount }) => {
-        setCustomers(mergedCustomers);
+    loadCustomersFromSupabase()
+      .then((supabaseCustomers) => {
+        setCustomers(supabaseCustomers);
+        setDataSource("Supabase");
         setSourceCounts({
-          supabase: supabaseCount,
-          localStorage: storedCustomers.length,
-          mock: mockCustomers.length
+          supabase: supabaseCustomers.length,
+          localStorage: 0,
+          mock: 0
         });
         setSupabaseError("");
       })
       .catch((error) => {
+        const fallbackCustomers = getAllCustomers();
+        const storedCustomers = getStoredCustomers();
+
+        setCustomers(fallbackCustomers);
+        setDataSource("Fallback");
+        setSourceCounts({
+          supabase: 0,
+          localStorage: storedCustomers.length,
+          mock: mockCustomers.length
+        });
         setSupabaseError(
           error instanceof Error
             ? error.message
@@ -131,6 +144,9 @@ export default function CustomerManager() {
         </div>
 
         <section className="mt-5 rounded-lg border border-nordix-mist bg-white p-4 shadow-sm">
+          <p className="mb-3 text-sm font-semibold text-nordix-ink">
+            Bron klanten: {dataSource}
+          </p>
           <div className="grid gap-3 text-sm text-slate-700 sm:grid-cols-3">
             <SourceCount label="Klanten uit Supabase" value={sourceCounts.supabase} />
             <SourceCount label="LocalStorage fallback" value={sourceCounts.localStorage} />
@@ -186,10 +202,7 @@ export default function CustomerManager() {
   );
 }
 
-async function loadCustomersFromSupabase(
-  fallbackCustomers: Customer[],
-  _storedCustomerCount: number
-) {
+async function loadCustomersFromSupabase() {
   const supabase = createSupabaseClient();
   const { data: supabaseCustomers, error: customersError } = await supabase
     .from("customers")
@@ -231,20 +244,9 @@ async function loadCustomersFromSupabase(
     }
   });
 
-  const supabaseMappedCustomers = customerRows.map((customer) =>
+  return customerRows.map((customer) =>
     mapSupabaseCustomer(customer, tripsByCustomerId.get(customer.id))
   );
-
-  const customersById = new Map<string, Customer>();
-  fallbackCustomers.forEach((customer) => customersById.set(customer.id, customer));
-  supabaseMappedCustomers.forEach((customer) =>
-    customersById.set(customer.id, customer)
-  );
-
-  return {
-    mergedCustomers: Array.from(customersById.values()),
-    supabaseCount: supabaseMappedCustomers.length
-  };
 }
 
 function mapSupabaseCustomer(

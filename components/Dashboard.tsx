@@ -5,7 +5,6 @@ import Link from "next/link";
 import { customerDetailsDefaults, normalizeCustomer } from "@/lib/customerDefaults";
 import { getDashboardActionGroups } from "@/lib/dashboardActions";
 import { getAllCustomers } from "@/lib/customerStorage";
-import { mockCustomers } from "@/lib/mockCustomers";
 import { createSupabaseClient } from "@/lib/supabaseClient";
 import { getTripStats } from "@/lib/tripRadar";
 import type { Customer } from "@/types/customer";
@@ -61,16 +60,14 @@ type SupabasePaymentRow = {
 };
 
 export default function Dashboard() {
-  const [customers, setCustomers] = useState<Customer[]>(mockCustomers);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [dashboardSource, setDashboardSource] =
     useState<DashboardSource>("Fallback");
   const [supabaseError, setSupabaseError] = useState("");
 
   useEffect(() => {
-    const fallbackCustomers = getAllCustomers();
-
-    setCustomers(fallbackCustomers);
-    setDashboardSource("Fallback");
+    setCustomers([]);
+    setDashboardSource("Supabase");
 
     loadDashboardCustomersFromSupabase()
       .then((supabaseCustomers) => {
@@ -79,6 +76,8 @@ export default function Dashboard() {
         setSupabaseError("");
       })
       .catch((error) => {
+        const fallbackCustomers = getAllCustomers();
+
         setCustomers(fallbackCustomers);
         setDashboardSource("Fallback");
         setSupabaseError(

@@ -109,9 +109,8 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    const foundCustomer = getAllCustomers().find((item) => item.id === id) ?? null;
-    setCustomer(foundCustomer);
-    setDataSource("Fallback");
+    setCustomer(null);
+    setDataSource("Supabase");
     setSupabaseTripId("");
     setSupabaseNoteId("");
     setSupabasePaymentIds(emptyPaymentIds);
@@ -129,6 +128,9 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
         }
       })
       .catch(() => {
+        const foundCustomer = getAllCustomers().find((item) => item.id === id) ?? null;
+
+        setCustomer(foundCustomer);
         setDataSource("Fallback");
       });
   }, [id]);
@@ -292,7 +294,12 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
             Klant niet gevonden
           </h2>
           <p className="mt-2 text-sm text-slate-600">
-            Deze klant staat niet in de mock data of localStorage.
+            {dataSource === "Supabase"
+              ? "Deze klant staat niet in Supabase."
+              : "Deze klant staat niet in de fallback data."}
+          </p>
+          <p className="mt-4 text-sm font-semibold text-nordix-ink">
+            Bron: {dataSource}
           </p>
         </section>
       </div>
