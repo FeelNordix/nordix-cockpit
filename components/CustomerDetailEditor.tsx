@@ -3,25 +3,80 @@
 import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  customerDetailsDefaults,
   getCustomerWorkflowState,
   getDefaultQuoteFollowUpDate,
+  normalizeCustomer,
   recalculateWorkflowDates,
   withConfirmedNumbers
 } from "@/lib/customerDefaults";
 import { getAllCustomers, saveCustomer } from "@/lib/customerStorage";
+import { createSupabaseClient } from "@/lib/supabaseClient";
 import type { Customer, Traveler } from "@/types/customer";
 
 type CustomerDetailEditorProps = {
   id: string;
 };
 
+type DataSource = "Supabase" | "Fallback";
+
+type SupabaseCustomerRow = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  company_name: string | null;
+  email: string | null;
+  phone: string | null;
+  status: Customer["status"] | string | null;
+};
+
+type SupabaseTripRow = {
+  brand: Customer["brand"] | string | null;
+  offer_number: string | null;
+  trip_number: string | null;
+  invoice_number: string | null;
+  destination: string | null;
+  travel_period: string | null;
+  trip_name: string | null;
+  departure_date: string | null;
+  return_date: string | null;
+  quote_sent: boolean | null;
+  quote_sent_date: string | null;
+  quote_follow_up_date: string | null;
+  quote_confirmed: boolean | null;
+  quote_confirmed_date: string | null;
+  invoice_date: string | null;
+  travel_documents_prepare_from_date: string | null;
+  travel_documents_planned_send_date: string | null;
+  travel_documents_prepared: boolean | null;
+  travel_documents_sent: boolean | null;
+  travel_documents_sent_date: string | null;
+  post_trip_contacted: boolean | null;
+  post_trip_contact_date: string | null;
+  google_review_link_sent: boolean | null;
+  google_review_link_sent_date: string | null;
+};
+
 export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) {
   const [customer, setCustomer] = useState<Customer | null>(null);
+  const [dataSource, setDataSource] = useState<DataSource>("Fallback");
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     const foundCustomer = getAllCustomers().find((item) => item.id === id) ?? null;
     setCustomer(foundCustomer);
+    setDataSource("Fallback");
+
+    loadCustomerFromSupabase(id)
+      .then((supabaseCustomer) => {
+        if (supabaseCustomer) {
+          setCustomer(supabaseCustomer);
+          setDataSource("Supabase");
+        }
+      })
+      .catch(() => {
+        setDataSource("Fallback");
+      });
   }, [id]);
 
   function updateField<Field extends keyof Customer>(
@@ -185,6 +240,9 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
             {customer.status}
           </span>
         </div>
+        <p className="mt-4 text-sm font-semibold text-nordix-ink">
+          Bron: {dataSource}
+        </p>
       </section>
 
       <form
@@ -339,6 +397,101 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
       </form>
     </div>
   );
+}
+
+async function loadCustomerFromSupabase(id: string) {
+  const supabase = createSupabaseClient();
+  const { data: customer, error: customerError } = await supabase
+    .from("customers")
+    .select("id,first_name,last_name,company_name,email,phone,status")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (customerError) {
+    throw new Error(customerError.message);
+  }
+
+  if (!customer) {
+    return null;
+  }
+
+  const { data: trip, error: tripError } = await supabase
+    .from("trips")
+    .select(
+      "brand,offer_number,trip_number,invoice_number,destination,travel_period,trip_name,departure_date,return_date,quote_sent,quote_sent_date,quote_follow_up_date,quote_confirmed,quote_confirmed_date,invoice_date,travel_documents_prepare_from_date,travel_documents_planned_send_date,travel_documents_prepared,travel_documents_sent,travel_documents_sent_date,post_trip_contacted,post_trip_contact_date,google_review_link_sent,google_review_link_sent_date"
+    )
+    .eq("customer_id", id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (tripError) {
+    throw new Error(tripError.message);
+  }
+
+  return mapSupabaseCustomer(
+    customer as SupabaseCustomerRow,
+    (trip as SupabaseTripRow | null) ?? null
+  );
+}
+
+function mapSupabaseCustomer(
+  customer: SupabaseCustomerRow,
+  trip: SupabaseTripRow | null
+): Customer {
+  return normalizeCustomer({
+    id: customer.id,
+    ...customerDetailsDefaults,
+    firstName: customer.first_name || "",
+    lastName: customer.last_name || "",
+    companyName: customer.company_name || "Particulier",
+    email: customer.email || "",
+    phone: customer.phone || "Nog niet ingevuld",
+    destination: trip?.destination || "Nog te bepalen",
+    travelPeriod: trip?.travel_period || "Nog te bepalen",
+    status: normalizeStatus(customer.status),
+    notes: "Nog geen notities.",
+    brand: normalizeBrand(trip?.brand),
+    offerNumber: trip?.offer_number || "",
+    tripNumber: trip?.trip_number || "",
+    invoiceNumber: trip?.invoice_number || "",
+    tripName: trip?.trip_name || "",
+    departureDate: trip?.departure_date || "",
+    returnDate: trip?.return_date || "",
+    quoteSent: trip?.quote_sent === true,
+    quoteSentDate: trip?.quote_sent_date || "",
+    quoteFollowUpDate: trip?.quote_follow_up_date || "",
+    quoteConfirmed: trip?.quote_confirmed === true,
+    quoteConfirmedDate: trip?.quote_confirmed_date || "",
+    invoiceDate: trip?.invoice_date || "",
+    travelDocumentsPrepareFromDate:
+      trip?.travel_documents_prepare_from_date || "",
+    travelDocumentsPlannedSendDate:
+      trip?.travel_documents_planned_send_date || "",
+    travelDocumentsPrepared: trip?.travel_documents_prepared === true,
+    travelDocumentsSent: trip?.travel_documents_sent === true,
+    travelDocumentsSentDate: trip?.travel_documents_sent_date || "",
+    postTripContacted: trip?.post_trip_contacted === true,
+    postTripContactDate: trip?.post_trip_contact_date || "",
+    googleReviewLinkSent: trip?.google_review_link_sent === true,
+    googleReviewLinkSentDate: trip?.google_review_link_sent_date || ""
+  });
+}
+
+function normalizeStatus(status: string | null): Customer["status"] {
+  if (
+    status === "Nieuwe aanvraag" ||
+    status === "Intake gepland" ||
+    status === "Reisvoorstel"
+  ) {
+    return status;
+  }
+
+  return "Nieuwe aanvraag";
+}
+
+function normalizeBrand(brand: string | null | undefined): Customer["brand"] {
+  return brand === "Feel Dutch" ? "Feel Dutch" : "Feel Nordix";
 }
 
 type SectionCardProps = {
