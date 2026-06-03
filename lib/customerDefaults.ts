@@ -141,13 +141,22 @@ export function withTravelDocumentDates(customer: Customer) {
   }
 
   const dates = getDefaultTravelDocumentDates(customer.departureDate);
+  const legacyDates = getLegacyTravelDocumentDates(customer.departureDate);
 
   return {
     ...customer,
-    travelDocumentsPrepareFromDate:
-      customer.travelDocumentsPrepareFromDate || dates.prepareFromDate,
-    travelDocumentsPlannedSendDate:
-      customer.travelDocumentsPlannedSendDate || dates.plannedSendDate
+    travelDocumentsPrepareFromDate: shouldUseDefaultTravelDocumentDate(
+      customer.travelDocumentsPrepareFromDate,
+      legacyDates.prepareFromDate
+    )
+      ? dates.prepareFromDate
+      : customer.travelDocumentsPrepareFromDate,
+    travelDocumentsPlannedSendDate: shouldUseDefaultTravelDocumentDate(
+      customer.travelDocumentsPlannedSendDate,
+      legacyDates.plannedSendDate
+    )
+      ? dates.plannedSendDate
+      : customer.travelDocumentsPlannedSendDate
   };
 }
 
@@ -177,6 +186,7 @@ export function recalculateWorkflowDates(customer: Customer) {
   }
 
   const travelDocumentDates = getDefaultTravelDocumentDates(customer.departureDate);
+  const legacyTravelDocumentDates = getLegacyTravelDocumentDates(customer.departureDate);
   const paymentDates =
     customer.invoiceDate && customer.departureDate
       ? getDefaultPaymentDates(customer.invoiceDate, customer.departureDate)
@@ -184,8 +194,18 @@ export function recalculateWorkflowDates(customer: Customer) {
 
   return {
     ...customer,
-    travelDocumentsPrepareFromDate: travelDocumentDates.prepareFromDate,
-    travelDocumentsPlannedSendDate: travelDocumentDates.plannedSendDate,
+    travelDocumentsPrepareFromDate: shouldUseDefaultTravelDocumentDate(
+      customer.travelDocumentsPrepareFromDate,
+      legacyTravelDocumentDates.prepareFromDate
+    )
+      ? travelDocumentDates.prepareFromDate
+      : customer.travelDocumentsPrepareFromDate,
+    travelDocumentsPlannedSendDate: shouldUseDefaultTravelDocumentDate(
+      customer.travelDocumentsPlannedSendDate,
+      legacyTravelDocumentDates.plannedSendDate
+    )
+      ? travelDocumentDates.plannedSendDate
+      : customer.travelDocumentsPlannedSendDate,
     ...(paymentDates
       ? {
           paymentType: paymentDates.paymentType,
@@ -241,9 +261,20 @@ export function isDepartureWithinSixWeeks(
 
 export function getDefaultTravelDocumentDates(departureDate: string) {
   return {
+    prepareFromDate: shiftDate(departureDate, -28),
+    plannedSendDate: shiftDate(departureDate, -21)
+  };
+}
+
+function getLegacyTravelDocumentDates(departureDate: string) {
+  return {
     prepareFromDate: shiftDate(departureDate, -14),
     plannedSendDate: shiftDate(departureDate, -7)
   };
+}
+
+function shouldUseDefaultTravelDocumentDate(currentDate: string, legacyDate: string) {
+  return !currentDate || currentDate === legacyDate;
 }
 
 export function getDefaultQuoteFollowUpDate(quoteSentDate: string) {
@@ -266,9 +297,22 @@ function shiftDate(dateValue: string, days: number) {
 }
 
 function parseDate(dateValue: string) {
-  const date = new Date(`${dateValue}T00:00:00`);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateValue);
 
-  if (Number.isNaN(date.getTime())) {
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
     return null;
   }
 

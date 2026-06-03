@@ -6,6 +6,7 @@ import {
   customerDetailsDefaults,
   getCustomerWorkflowState,
   getDefaultQuoteFollowUpDate,
+  getDefaultTravelDocumentDates,
   normalizeCustomer,
   recalculateWorkflowDates,
   withConfirmedNumbers
@@ -303,6 +304,25 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
   const adultCount = customer.travelers.filter((traveler) => traveler.type === "adult").length;
   const childCount = customer.travelers.filter((traveler) => traveler.type === "child").length;
   const travelerCount = customer.travelers.length;
+  const travelDocumentWarnings = getTravelDocumentDateWarnings(customer);
+
+  function recalculateTravelDocumentDates() {
+    setSaved(false);
+    setSaveError("");
+    setCustomer((current) => {
+      if (!current?.departureDate) {
+        return current;
+      }
+
+      const dates = getDefaultTravelDocumentDates(current.departureDate);
+
+      return {
+        ...current,
+        travelDocumentsPrepareFromDate: dates.prepareFromDate,
+        travelDocumentsPlannedSendDate: dates.plannedSendDate
+      };
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -457,8 +477,35 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
             </SectionCard>
 
             <SectionCard title="Reisdocumenten">
+              <p className="text-sm font-semibold text-nordix-ink md:col-span-2">
+                Bron reisdocumenten: {dataSource}
+              </p>
+              {travelDocumentWarnings.length > 0 ? (
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 md:col-span-2">
+                  <p className="font-semibold">Controleer de reisdocumentdatums.</p>
+                  <ul className="mt-2 list-disc space-y-1 pl-5">
+                    {travelDocumentWarnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               <TextField label="Reisdocumenten voorbereiden vanaf datum" type="date" value={customer.travelDocumentsPrepareFromDate} onChange={(value) => updateField("travelDocumentsPrepareFromDate", value)} />
               <TextField label="Geplande verzenddatum reisdocumenten" type="date" value={customer.travelDocumentsPlannedSendDate} onChange={(value) => updateField("travelDocumentsPlannedSendDate", value)} />
+              <div className="md:col-span-2">
+                <button
+                  type="button"
+                  onClick={recalculateTravelDocumentDates}
+                  disabled={!customer.departureDate}
+                  className="rounded-md border border-nordix-fjord bg-white px-4 py-2.5 text-sm font-semibold text-nordix-ink shadow-sm transition hover:border-nordix-pine hover:text-nordix-pine disabled:cursor-not-allowed disabled:border-nordix-mist disabled:text-slate-400"
+                >
+                  Datums opnieuw berekenen
+                </button>
+                <p className="mt-2 text-sm text-slate-600">
+                  Zet voorbereiden op 28 dagen voor vertrek en verzending op 21
+                  dagen voor vertrek.
+                </p>
+              </div>
               <BooleanField label="Reisdocumenten voorbereid" value={customer.travelDocumentsPrepared} onChange={(value) => updateField("travelDocumentsPrepared", value)} />
               <BooleanField label="Reisbescheiden verstuurd" value={customer.travelDocumentsSent} onChange={(value) => updateField("travelDocumentsSent", value)} />
               <TextField label="Datum reisbescheiden verstuurd" type="date" value={customer.travelDocumentsSentDate} onChange={(value) => updateField("travelDocumentsSentDate", value)} />
@@ -703,6 +750,96 @@ function normalizeStatus(status: string | null): Customer["status"] {
 
 function normalizeBrand(brand: string | null | undefined): Customer["brand"] {
   return brand === "Feel Dutch" ? "Feel Dutch" : "Feel Nordix";
+}
+
+function getTravelDocumentDateWarnings(customer: Customer) {
+  if (!customer.departureDate) {
+    return [];
+  }
+
+  const warnings: string[] = [];
+  const departureDate = parseIsoInputDate(customer.departureDate);
+
+  if (!departureDate) {
+    return ["De vertrekdatum is geen geldige ISO-datum in formaat YYYY-MM-DD."];
+  }
+
+  addTravelDocumentDateWarning(
+    warnings,
+    "Voorbereiden vanaf",
+    customer.travelDocumentsPrepareFromDate,
+    departureDate
+  );
+  addTravelDocumentDateWarning(
+    warnings,
+    "Geplande verzending",
+    customer.travelDocumentsPlannedSendDate,
+    departureDate
+  );
+
+  return warnings;
+}
+
+function addTravelDocumentDateWarning(
+  warnings: string[],
+  label: string,
+  dateValue: string,
+  departureDate: Date
+) {
+  if (!dateValue) {
+    return;
+  }
+
+  const parsedDate = parseIsoInputDate(dateValue);
+
+  if (!parsedDate) {
+    warnings.push(
+      `${label} is geen geldige ISO-datum. Gebruik YYYY-MM-DD. Huidige waarde: ${dateValue}.`
+    );
+    return;
+  }
+
+  const daysBeforeDeparture = getDayDifference(parsedDate, departureDate);
+
+  if (daysBeforeDeparture < 0) {
+    warnings.push(`${label} ligt na de vertrekdatum.`);
+    return;
+  }
+
+  if (daysBeforeDeparture > 90) {
+    warnings.push(
+      `${label} ligt ${daysBeforeDeparture} dagen voor vertrek en lijkt onrealistisch vroeg.`
+    );
+  }
+}
+
+function parseIsoInputDate(dateValue: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateValue);
+
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return date;
+}
+
+function getDayDifference(fromDate: Date, toDate: Date) {
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+
+  return Math.round((toDate.getTime() - fromDate.getTime()) / millisecondsPerDay);
 }
 
 async function saveCustomerToSupabase(
