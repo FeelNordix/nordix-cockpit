@@ -7,7 +7,8 @@ export type TripFilter =
   | "confirmed"
   | "upcoming"
   | "departed"
-  | "completed";
+  | "completed"
+  | "open-payments";
 
 export type TripRow = {
   customerId: string;
@@ -69,6 +70,10 @@ export function filterTripRows(
 
     if (filter === "completed") {
       return row.status === "Afgerond";
+    }
+
+    if (filter === "open-payments") {
+      return row.paymentStatus !== "Betaald" && row.paymentStatus !== "-";
     }
 
     return true;
