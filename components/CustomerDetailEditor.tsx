@@ -64,11 +64,21 @@ type SupabaseNoteRow = {
   note?: string | null;
 };
 
+type SupabaseTravelerRow = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  birth_date: string | null;
+  traveler_type: Traveler["type"] | string | null;
+  notes: string | null;
+};
+
 export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [dataSource, setDataSource] = useState<DataSource>("Fallback");
   const [supabaseTripId, setSupabaseTripId] = useState("");
   const [supabaseNoteId, setSupabaseNoteId] = useState("");
+  const [deletedSupabaseTravelerIds, setDeletedSupabaseTravelerIds] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -79,6 +89,7 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
     setDataSource("Fallback");
     setSupabaseTripId("");
     setSupabaseNoteId("");
+    setDeletedSupabaseTravelerIds([]);
 
     loadCustomerFromSupabase(id)
       .then((result) => {
@@ -87,6 +98,7 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
           setDataSource("Supabase");
           setSupabaseTripId(result.tripId);
           setSupabaseNoteId(result.noteId);
+          setDeletedSupabaseTravelerIds([]);
         }
       })
       .catch(() => {
@@ -137,6 +149,7 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
 
   function addTraveler() {
     setSaved(false);
+    setSaveError("");
     setCustomer((current) => {
       if (!current) {
         return current;
@@ -164,6 +177,7 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
     value: Traveler[Field]
   ) {
     setSaved(false);
+    setSaveError("");
     setCustomer((current) => {
       if (!current) {
         return current;
@@ -180,6 +194,12 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
 
   function removeTraveler(travelerId: string) {
     setSaved(false);
+    setSaveError("");
+    if (dataSource === "Supabase") {
+      setDeletedSupabaseTravelerIds((current) =>
+        current.includes(travelerId) ? current : [...current, travelerId]
+      );
+    }
     setCustomer((current) => {
       if (!current) {
         return current;
@@ -208,9 +228,11 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
         const savedNoteId = await saveCustomerToSupabase(
           customer,
           supabaseTripId,
-          supabaseNoteId
+          supabaseNoteId,
+          deletedSupabaseTravelerIds
         );
         setSupabaseNoteId(savedNoteId);
+        setDeletedSupabaseTravelerIds([]);
       } else {
         saveCustomer(customer);
       }
@@ -321,6 +343,9 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
 
         <SectionCard title="Reizigers">
           <div className="md:col-span-2">
+            <p className="mb-4 text-sm font-semibold text-nordix-ink">
+              Bron reizigers: {dataSource}
+            </p>
             <div className="grid gap-3 sm:grid-cols-3">
               <CountCard label="Totaal" value={travelerCount} />
               <CountCard label="Volwassenen" value={adultCount} />
@@ -475,6 +500,23 @@ async function loadCustomerFromSupabase(id: string) {
     throw new Error(tripError.message);
   }
 
+  const tripRow = (trip as SupabaseTripRow | null) ?? null;
+  let travelerRows: SupabaseTravelerRow[] = [];
+
+  if (tripRow?.id) {
+    const { data: travelers, error: travelersError } = await supabase
+      .from("travelers")
+      .select("id,first_name,last_name,birth_date,traveler_type,notes")
+      .eq("trip_id", tripRow.id)
+      .order("created_at", { ascending: true });
+
+    if (travelersError) {
+      throw new Error(travelersError.message);
+    }
+
+    travelerRows = (travelers ?? []) as SupabaseTravelerRow[];
+  }
+
   const { data: note, error: noteError } = await supabase
     .from("notes")
     .select("*")
@@ -487,14 +529,14 @@ async function loadCustomerFromSupabase(id: string) {
     throw new Error(noteError.message);
   }
 
-  const tripRow = (trip as SupabaseTripRow | null) ?? null;
   const noteRow = (note as SupabaseNoteRow | null) ?? null;
 
   return {
     customer: mapSupabaseCustomer(
       customer as SupabaseCustomerRow,
       tripRow,
-      noteRow
+      noteRow,
+      travelerRows
     ),
     tripId: tripRow?.id || "",
     noteId: noteRow?.id || ""
@@ -504,7 +546,8 @@ async function loadCustomerFromSupabase(id: string) {
 function mapSupabaseCustomer(
   customer: SupabaseCustomerRow,
   trip: SupabaseTripRow | null,
-  note: SupabaseNoteRow | null
+  note: SupabaseNoteRow | null,
+  travelers: SupabaseTravelerRow[]
 ): Customer {
   return normalizeCustomer({
     id: customer.id,
@@ -541,8 +584,20 @@ function mapSupabaseCustomer(
     postTripContacted: trip?.post_trip_contacted === true,
     postTripContactDate: trip?.post_trip_contact_date || "",
     googleReviewLinkSent: trip?.google_review_link_sent === true,
-    googleReviewLinkSentDate: trip?.google_review_link_sent_date || ""
+    googleReviewLinkSentDate: trip?.google_review_link_sent_date || "",
+    travelers: travelers.map(mapSupabaseTraveler)
   });
+}
+
+function mapSupabaseTraveler(traveler: SupabaseTravelerRow): Traveler {
+  return {
+    id: traveler.id,
+    firstName: traveler.first_name || "",
+    lastName: traveler.last_name || "",
+    birthDate: traveler.birth_date || "",
+    type: traveler.traveler_type === "child" ? "child" : "adult",
+    notes: traveler.notes || ""
+  };
 }
 
 function normalizeStatus(status: string | null): Customer["status"] {
@@ -564,7 +619,8 @@ function normalizeBrand(brand: string | null | undefined): Customer["brand"] {
 async function saveCustomerToSupabase(
   customer: Customer,
   tripId: string,
-  noteId: string
+  noteId: string,
+  deletedTravelerIds: string[]
 ) {
   const supabase = createSupabaseClient();
   const { data: updatedCustomer, error: customerError } = await supabase
@@ -632,7 +688,55 @@ async function saveCustomerToSupabase(
     );
   }
 
+  await saveTravelersToSupabase(customer.travelers, tripId, deletedTravelerIds);
+
   return saveNoteToSupabase(customer, tripId, noteId);
+}
+
+async function saveTravelersToSupabase(
+  travelers: Traveler[],
+  tripId: string,
+  deletedTravelerIds: string[]
+) {
+  const supabase = createSupabaseClient();
+
+  if (!tripId && (travelers.length > 0 || deletedTravelerIds.length > 0)) {
+    throw new Error("Reizigers opslaan in Supabase is mislukt: reis ontbreekt.");
+  }
+
+  if (deletedTravelerIds.length > 0) {
+    const { error } = await supabase
+      .from("travelers")
+      .delete()
+      .in("id", deletedTravelerIds);
+
+    if (error) {
+      throw new Error(error.message || "Reiziger verwijderen is mislukt.");
+    }
+  }
+
+  if (travelers.length === 0) {
+    return;
+  }
+
+  const { error } = await supabase
+    .from("travelers")
+    .upsert(
+      travelers.map((traveler) => ({
+        id: traveler.id,
+        trip_id: tripId,
+        first_name: traveler.firstName,
+        last_name: traveler.lastName,
+        birth_date: emptyToNull(traveler.birthDate),
+        traveler_type: traveler.type,
+        notes: traveler.notes
+      }))
+    )
+    .select("id");
+
+  if (error) {
+    throw new Error(error.message || "Reizigers opslaan in Supabase is mislukt.");
+  }
 }
 
 async function saveNoteToSupabase(
