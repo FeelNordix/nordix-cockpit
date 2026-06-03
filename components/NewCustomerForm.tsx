@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { customerDetailsDefaults } from "@/lib/customerDefaults";
 import { getNextOfferNumber, saveCustomer } from "@/lib/customerStorage";
+import { getNextOfferNumberForTrips } from "@/lib/offerNumbers";
 import { createSupabaseClient } from "@/lib/supabaseClient";
 import type { Customer } from "@/types/customer";
 
@@ -18,6 +19,12 @@ const emptyForm = {
   status: "Nieuwe aanvraag",
   brand: "Feel Nordix",
   notes: ""
+};
+
+type SupabaseTripNumberRow = {
+  offer_number: string | null;
+  trip_number: string | null;
+  invoice_number: string | null;
 };
 
 export default function NewCustomerForm() {
@@ -38,10 +45,18 @@ export default function NewCustomerForm() {
     setSavedCustomerId("");
     setIsSaving(true);
 
+    let offerNumber = "";
+
+    try {
+      offerNumber = await getNextOfferNumberFromSupabase();
+    } catch {
+      offerNumber = getNextOfferNumber();
+    }
+
     const customer: Customer = {
       id: crypto.randomUUID(),
       ...customerDetailsDefaults,
-      offerNumber: getNextOfferNumber(),
+      offerNumber,
       firstName: form.firstName.trim(),
       lastName: form.lastName.trim(),
       companyName: form.companyName.trim() || "Particulier",
@@ -218,6 +233,26 @@ async function saveCustomerToSupabase(customer: Customer) {
     customerId: createdCustomer.id,
     tripId: createdTrip.id
   };
+}
+
+async function getNextOfferNumberFromSupabase() {
+  const supabase = createSupabaseClient();
+  const { data: sessionData } = await supabase.auth.getSession();
+  const hasSession = Boolean(sessionData.session);
+
+  if (!hasSession) {
+    throw new Error("Er is geen actieve Supabase sessie.");
+  }
+
+  const { data, error } = await supabase
+    .from("trips")
+    .select("offer_number,trip_number,invoice_number");
+
+  if (error) {
+    throw new Error(error.message || "Volgend offertenummer ophalen is mislukt.");
+  }
+
+  return getNextOfferNumberForTrips((data ?? []) as SupabaseTripNumberRow[]);
 }
 
 type BrandFieldProps = {
