@@ -73,11 +73,35 @@ type SupabaseTravelerRow = {
   notes: string | null;
 };
 
+type SupabasePaymentRow = {
+  id: string;
+  payment_type: "deposit" | "final" | "full" | string | null;
+  label: string | null;
+  total_amount: number | string | null;
+  due_date: string | null;
+  received: boolean | null;
+  received_date: string | null;
+};
+
+type SupabasePaymentIds = {
+  deposit: string;
+  final: string;
+  full: string;
+};
+
+const emptyPaymentIds: SupabasePaymentIds = {
+  deposit: "",
+  final: "",
+  full: ""
+};
+
 export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [dataSource, setDataSource] = useState<DataSource>("Fallback");
   const [supabaseTripId, setSupabaseTripId] = useState("");
   const [supabaseNoteId, setSupabaseNoteId] = useState("");
+  const [supabasePaymentIds, setSupabasePaymentIds] =
+    useState<SupabasePaymentIds>(emptyPaymentIds);
   const [deletedSupabaseTravelerIds, setDeletedSupabaseTravelerIds] = useState<string[]>([]);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -89,6 +113,7 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
     setDataSource("Fallback");
     setSupabaseTripId("");
     setSupabaseNoteId("");
+    setSupabasePaymentIds(emptyPaymentIds);
     setDeletedSupabaseTravelerIds([]);
 
     loadCustomerFromSupabase(id)
@@ -98,6 +123,7 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
           setDataSource("Supabase");
           setSupabaseTripId(result.tripId);
           setSupabaseNoteId(result.noteId);
+          setSupabasePaymentIds(result.paymentIds);
           setDeletedSupabaseTravelerIds([]);
         }
       })
@@ -229,9 +255,11 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
           customer,
           supabaseTripId,
           supabaseNoteId,
+          supabasePaymentIds,
           deletedSupabaseTravelerIds
         );
-        setSupabaseNoteId(savedNoteId);
+        setSupabaseNoteId(savedNoteId.noteId);
+        setSupabasePaymentIds(savedNoteId.paymentIds);
         setDeletedSupabaseTravelerIds([]);
       } else {
         saveCustomer(customer);
@@ -404,6 +432,9 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
             </SectionCard>
 
             <SectionCard title="Betalingen">
+              <p className="text-sm font-semibold text-nordix-ink md:col-span-2">
+                Bron betalingen: {dataSource}
+              </p>
               <TextField label="Totaalbedrag" type="number" value={customer.totalAmount} onChange={(value) => updateField("totalAmount", value)} />
               <PaymentTypeField value={customer.paymentType} onChange={(value) => updateField("paymentType", value)} />
 
@@ -502,6 +533,7 @@ async function loadCustomerFromSupabase(id: string) {
 
   const tripRow = (trip as SupabaseTripRow | null) ?? null;
   let travelerRows: SupabaseTravelerRow[] = [];
+  let paymentRows: SupabasePaymentRow[] = [];
 
   if (tripRow?.id) {
     const { data: travelers, error: travelersError } = await supabase
@@ -515,6 +547,17 @@ async function loadCustomerFromSupabase(id: string) {
     }
 
     travelerRows = (travelers ?? []) as SupabaseTravelerRow[];
+
+    const { data: payments, error: paymentsError } = await supabase
+      .from("payments")
+      .select("id,payment_type,label,total_amount,due_date,received,received_date")
+      .eq("trip_id", tripRow.id);
+
+    if (paymentsError) {
+      throw new Error(paymentsError.message);
+    }
+
+    paymentRows = (payments ?? []) as SupabasePaymentRow[];
   }
 
   const { data: note, error: noteError } = await supabase
@@ -536,10 +579,12 @@ async function loadCustomerFromSupabase(id: string) {
       customer as SupabaseCustomerRow,
       tripRow,
       noteRow,
-      travelerRows
+      travelerRows,
+      paymentRows
     ),
     tripId: tripRow?.id || "",
-    noteId: noteRow?.id || ""
+    noteId: noteRow?.id || "",
+    paymentIds: getPaymentIds(paymentRows)
   };
 }
 
@@ -547,8 +592,19 @@ function mapSupabaseCustomer(
   customer: SupabaseCustomerRow,
   trip: SupabaseTripRow | null,
   note: SupabaseNoteRow | null,
-  travelers: SupabaseTravelerRow[]
+  travelers: SupabaseTravelerRow[],
+  payments: SupabasePaymentRow[]
 ): Customer {
+  const paymentsByType = getPaymentsByType(payments);
+  const depositPayment = paymentsByType.deposit;
+  const finalPayment = paymentsByType.final;
+  const fullPayment = paymentsByType.full;
+  const paymentType: Customer["paymentType"] = fullPayment ? "full" : "deposit_and_final";
+  const totalAmount =
+    formatAmount(fullPayment?.total_amount) ||
+    formatAmount(depositPayment?.total_amount) ||
+    formatAmount(finalPayment?.total_amount);
+
   return normalizeCustomer({
     id: customer.id,
     ...customerDetailsDefaults,
@@ -585,8 +641,41 @@ function mapSupabaseCustomer(
     postTripContactDate: trip?.post_trip_contact_date || "",
     googleReviewLinkSent: trip?.google_review_link_sent === true,
     googleReviewLinkSentDate: trip?.google_review_link_sent_date || "",
+    totalAmount,
+    paymentType,
+    depositDueDate: depositPayment?.due_date || "",
+    depositReceived: depositPayment?.received === true,
+    depositDate: depositPayment?.received_date || "",
+    finalPaymentDueDate: finalPayment?.due_date || "",
+    finalPaymentReceived: finalPayment?.received === true,
+    finalPaymentDate: finalPayment?.received_date || "",
+    fullPaymentDueDate: fullPayment?.due_date || "",
+    fullPaymentReceived: fullPayment?.received === true,
+    fullPaymentDate: fullPayment?.received_date || "",
     travelers: travelers.map(mapSupabaseTraveler)
   });
+}
+
+function getPaymentsByType(payments: SupabasePaymentRow[]) {
+  return {
+    deposit: payments.find((payment) => payment.payment_type === "deposit"),
+    final: payments.find((payment) => payment.payment_type === "final"),
+    full: payments.find((payment) => payment.payment_type === "full")
+  };
+}
+
+function getPaymentIds(payments: SupabasePaymentRow[]): SupabasePaymentIds {
+  const paymentsByType = getPaymentsByType(payments);
+
+  return {
+    deposit: paymentsByType.deposit?.id || "",
+    final: paymentsByType.final?.id || "",
+    full: paymentsByType.full?.id || ""
+  };
+}
+
+function formatAmount(amount: number | string | null | undefined) {
+  return amount === null || amount === undefined ? "" : String(amount);
 }
 
 function mapSupabaseTraveler(traveler: SupabaseTravelerRow): Traveler {
@@ -620,6 +709,7 @@ async function saveCustomerToSupabase(
   customer: Customer,
   tripId: string,
   noteId: string,
+  paymentIds: SupabasePaymentIds,
   deletedTravelerIds: string[]
 ) {
   const supabase = createSupabaseClient();
@@ -688,9 +778,131 @@ async function saveCustomerToSupabase(
     );
   }
 
+  const savedPaymentIds = await savePaymentsToSupabase(
+    customer,
+    tripId,
+    paymentIds
+  );
   await saveTravelersToSupabase(customer.travelers, tripId, deletedTravelerIds);
+  const savedNoteId = await saveNoteToSupabase(customer, tripId, noteId);
 
-  return saveNoteToSupabase(customer, tripId, noteId);
+  return {
+    noteId: savedNoteId,
+    paymentIds: savedPaymentIds
+  };
+}
+
+async function savePaymentsToSupabase(
+  customer: Customer,
+  tripId: string,
+  paymentIds: SupabasePaymentIds
+) {
+  if (!tripId) {
+    throw new Error("Betalingen opslaan in Supabase is mislukt: reis ontbreekt.");
+  }
+
+  if (customer.paymentType === "full") {
+    const fullId = await savePaymentToSupabase({
+      id: paymentIds.full,
+      tripId,
+      paymentType: "full",
+      label: "Volledige reissom",
+      totalAmount: customer.totalAmount,
+      dueDate: customer.fullPaymentDueDate,
+      received: customer.fullPaymentReceived,
+      receivedDate: customer.fullPaymentDate
+    });
+
+    return {
+      ...paymentIds,
+      full: fullId
+    };
+  }
+
+  const depositId = await savePaymentToSupabase({
+    id: paymentIds.deposit,
+    tripId,
+    paymentType: "deposit",
+    label: "Aanbetaling",
+    totalAmount: customer.totalAmount,
+    dueDate: customer.depositDueDate,
+    received: customer.depositReceived,
+    receivedDate: customer.depositDate
+  });
+  const finalId = await savePaymentToSupabase({
+    id: paymentIds.final,
+    tripId,
+    paymentType: "final",
+    label: "Restantbetaling",
+    totalAmount: customer.totalAmount,
+    dueDate: customer.finalPaymentDueDate,
+    received: customer.finalPaymentReceived,
+    receivedDate: customer.finalPaymentDate
+  });
+
+  return {
+    ...paymentIds,
+    deposit: depositId,
+    final: finalId
+  };
+}
+
+async function savePaymentToSupabase({
+  id,
+  tripId,
+  paymentType,
+  label,
+  totalAmount,
+  dueDate,
+  received,
+  receivedDate
+}: {
+  id: string;
+  tripId: string;
+  paymentType: "deposit" | "final" | "full";
+  label: string;
+  totalAmount: string;
+  dueDate: string;
+  received: boolean;
+  receivedDate: string;
+}) {
+  const supabase = createSupabaseClient();
+  const payload = {
+    trip_id: tripId,
+    payment_type: paymentType,
+    label,
+    total_amount: amountToNumber(totalAmount),
+    due_date: emptyToNull(dueDate),
+    received,
+    received_date: emptyToNull(receivedDate)
+  };
+
+  if (id) {
+    const { data, error } = await supabase
+      .from("payments")
+      .update(payload)
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
+
+    if (error || !data) {
+      throw new Error(error?.message || `${label} opslaan is mislukt.`);
+    }
+
+    return data.id as string;
+  }
+
+  const { data, error } = await supabase
+    .from("payments")
+    .insert(payload)
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message || `${label} aanmaken is mislukt.`);
+  }
+
+  return data.id as string;
 }
 
 async function saveTravelersToSupabase(
@@ -864,6 +1076,15 @@ function getAvailableNoteColumn(errorMessage: string): "body" | "note" {
 
 function emptyToNull(value: string) {
   return value || null;
+}
+
+function amountToNumber(value: string) {
+  if (!value) {
+    return null;
+  }
+
+  const amount = Number(value);
+  return Number.isNaN(amount) ? null : amount;
 }
 
 type SectionCardProps = {
