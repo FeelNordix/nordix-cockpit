@@ -31,6 +31,7 @@ type SupabaseCustomerRow = {
 };
 
 type SupabaseTripRow = {
+  id: string;
   brand: Customer["brand"] | string | null;
   offer_number: string | null;
   trip_number: string | null;
@@ -57,21 +58,35 @@ type SupabaseTripRow = {
   google_review_link_sent_date: string | null;
 };
 
+type SupabaseNoteRow = {
+  id: string;
+  body?: string | null;
+  note?: string | null;
+};
+
 export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) {
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [dataSource, setDataSource] = useState<DataSource>("Fallback");
+  const [supabaseTripId, setSupabaseTripId] = useState("");
+  const [supabaseNoteId, setSupabaseNoteId] = useState("");
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     const foundCustomer = getAllCustomers().find((item) => item.id === id) ?? null;
     setCustomer(foundCustomer);
     setDataSource("Fallback");
+    setSupabaseTripId("");
+    setSupabaseNoteId("");
 
     loadCustomerFromSupabase(id)
-      .then((supabaseCustomer) => {
-        if (supabaseCustomer) {
-          setCustomer(supabaseCustomer);
+      .then((result) => {
+        if (result) {
+          setCustomer(result.customer);
           setDataSource("Supabase");
+          setSupabaseTripId(result.tripId);
+          setSupabaseNoteId(result.noteId);
         }
       })
       .catch(() => {
@@ -84,6 +99,7 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
     value: Customer[Field]
   ) {
     setSaved(false);
+    setSaveError("");
     setCustomer((current) => {
       if (!current) {
         return current;
@@ -176,15 +192,39 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
     });
   }
 
-  function saveChanges(event: FormEvent<HTMLFormElement>) {
+  async function saveChanges(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!customer) {
       return;
     }
 
-    saveCustomer(customer);
-    setSaved(true);
+    setSaved(false);
+    setSaveError("");
+    setIsSaving(true);
+
+    try {
+      if (dataSource === "Supabase") {
+        const savedNoteId = await saveCustomerToSupabase(
+          customer,
+          supabaseTripId,
+          supabaseNoteId
+        );
+        setSupabaseNoteId(savedNoteId);
+      } else {
+        saveCustomer(customer);
+      }
+
+      setSaved(true);
+    } catch (error) {
+      setSaveError(
+        error instanceof Error
+          ? error.message
+          : "Wijzigingen opslaan is mislukt."
+      );
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   if (!customer) {
@@ -377,20 +417,26 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
           </>
         ) : null}
 
-        <SectionCard title="Notities">
-          <TextareaField label="Opmerkingen/notities" value={customer.notes} onChange={(value) => updateField("notes", value)} />
+        <SectionCard title="Notities / opmerkingen">
+          <TextareaField label="Opmerkingen" value={customer.notes} onChange={(value) => updateField("notes", value)} />
         </SectionCard>
 
         <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
           <button
             type="submit"
-            className="rounded-md bg-nordix-pine px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-nordix-pine/90"
+            disabled={isSaving}
+            className="rounded-md bg-nordix-pine px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-nordix-pine/90 disabled:cursor-not-allowed disabled:opacity-70"
           >
-            Opslaan
+            {isSaving ? "Opslaan..." : "Opslaan"}
           </button>
           {saved ? (
             <p className="text-sm font-medium text-nordix-pine">
               Wijzigingen opgeslagen.
+            </p>
+          ) : null}
+          {saveError ? (
+            <p className="text-sm font-medium text-red-700">
+              {saveError}
             </p>
           ) : null}
         </div>
@@ -418,7 +464,7 @@ async function loadCustomerFromSupabase(id: string) {
   const { data: trip, error: tripError } = await supabase
     .from("trips")
     .select(
-      "brand,offer_number,trip_number,invoice_number,destination,travel_period,trip_name,departure_date,return_date,quote_sent,quote_sent_date,quote_follow_up_date,quote_confirmed,quote_confirmed_date,invoice_date,travel_documents_prepare_from_date,travel_documents_planned_send_date,travel_documents_prepared,travel_documents_sent,travel_documents_sent_date,post_trip_contacted,post_trip_contact_date,google_review_link_sent,google_review_link_sent_date"
+      "id,brand,offer_number,trip_number,invoice_number,destination,travel_period,trip_name,departure_date,return_date,quote_sent,quote_sent_date,quote_follow_up_date,quote_confirmed,quote_confirmed_date,invoice_date,travel_documents_prepare_from_date,travel_documents_planned_send_date,travel_documents_prepared,travel_documents_sent,travel_documents_sent_date,post_trip_contacted,post_trip_contact_date,google_review_link_sent,google_review_link_sent_date"
     )
     .eq("customer_id", id)
     .order("created_at", { ascending: false })
@@ -429,15 +475,36 @@ async function loadCustomerFromSupabase(id: string) {
     throw new Error(tripError.message);
   }
 
-  return mapSupabaseCustomer(
-    customer as SupabaseCustomerRow,
-    (trip as SupabaseTripRow | null) ?? null
-  );
+  const { data: note, error: noteError } = await supabase
+    .from("notes")
+    .select("*")
+    .eq("customer_id", id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (noteError) {
+    throw new Error(noteError.message);
+  }
+
+  const tripRow = (trip as SupabaseTripRow | null) ?? null;
+  const noteRow = (note as SupabaseNoteRow | null) ?? null;
+
+  return {
+    customer: mapSupabaseCustomer(
+      customer as SupabaseCustomerRow,
+      tripRow,
+      noteRow
+    ),
+    tripId: tripRow?.id || "",
+    noteId: noteRow?.id || ""
+  };
 }
 
 function mapSupabaseCustomer(
   customer: SupabaseCustomerRow,
-  trip: SupabaseTripRow | null
+  trip: SupabaseTripRow | null,
+  note: SupabaseNoteRow | null
 ): Customer {
   return normalizeCustomer({
     id: customer.id,
@@ -450,7 +517,7 @@ function mapSupabaseCustomer(
     destination: trip?.destination || "Nog te bepalen",
     travelPeriod: trip?.travel_period || "Nog te bepalen",
     status: normalizeStatus(customer.status),
-    notes: "Nog geen notities.",
+    notes: note?.body || note?.note || "",
     brand: normalizeBrand(trip?.brand),
     offerNumber: trip?.offer_number || "",
     tripNumber: trip?.trip_number || "",
@@ -492,6 +559,207 @@ function normalizeStatus(status: string | null): Customer["status"] {
 
 function normalizeBrand(brand: string | null | undefined): Customer["brand"] {
   return brand === "Feel Dutch" ? "Feel Dutch" : "Feel Nordix";
+}
+
+async function saveCustomerToSupabase(
+  customer: Customer,
+  tripId: string,
+  noteId: string
+) {
+  const supabase = createSupabaseClient();
+  const { data: updatedCustomer, error: customerError } = await supabase
+    .from("customers")
+    .update({
+      first_name: customer.firstName,
+      last_name: customer.lastName,
+      company_name: customer.companyName,
+      email: customer.email,
+      phone: customer.phone,
+      status: customer.status
+    })
+    .eq("id", customer.id)
+    .select("id")
+    .maybeSingle();
+
+  if (customerError || !updatedCustomer) {
+    throw new Error(
+      customerError?.message ||
+        "Klantgegevens opslaan in Supabase is mislukt."
+    );
+  }
+
+  const { data: updatedTrips, error: tripError } = await supabase
+    .from("trips")
+    .update({
+      brand: customer.brand,
+      offer_number: customer.offerNumber,
+      trip_number: customer.tripNumber,
+      invoice_number: customer.invoiceNumber,
+      destination: customer.destination,
+      travel_period: customer.travelPeriod,
+      trip_name: customer.tripName,
+      departure_date: emptyToNull(customer.departureDate),
+      return_date: emptyToNull(customer.returnDate),
+      quote_sent: customer.quoteSent,
+      quote_sent_date: emptyToNull(customer.quoteSentDate),
+      quote_follow_up_date: emptyToNull(customer.quoteFollowUpDate),
+      quote_confirmed: customer.quoteConfirmed,
+      quote_confirmed_date: emptyToNull(customer.quoteConfirmedDate),
+      invoice_date: emptyToNull(customer.invoiceDate),
+      travel_documents_prepare_from_date: emptyToNull(
+        customer.travelDocumentsPrepareFromDate
+      ),
+      travel_documents_planned_send_date: emptyToNull(
+        customer.travelDocumentsPlannedSendDate
+      ),
+      travel_documents_prepared: customer.travelDocumentsPrepared,
+      travel_documents_sent: customer.travelDocumentsSent,
+      travel_documents_sent_date: emptyToNull(customer.travelDocumentsSentDate),
+      post_trip_contacted: customer.postTripContacted,
+      post_trip_contact_date: emptyToNull(customer.postTripContactDate),
+      google_review_link_sent: customer.googleReviewLinkSent,
+      google_review_link_sent_date: emptyToNull(
+        customer.googleReviewLinkSentDate
+      )
+    })
+    .eq("customer_id", customer.id)
+    .select("id");
+
+  if (tripError || !updatedTrips || updatedTrips.length === 0) {
+    throw new Error(
+      tripError?.message ||
+        "Reisgegevens opslaan in Supabase is mislukt."
+    );
+  }
+
+  return saveNoteToSupabase(customer, tripId, noteId);
+}
+
+async function saveNoteToSupabase(
+  customer: Customer,
+  tripId: string,
+  noteId: string
+) {
+  const supabase = createSupabaseClient();
+
+  if (noteId) {
+    const { data: updatedNote, error } = await supabase
+      .from("notes")
+      .update(getNotePayload(customer.notes, "both"))
+      .eq("id", noteId)
+      .select("id")
+      .maybeSingle();
+
+    if (error && isMissingNoteColumnError(error)) {
+      return updateNoteWithFallbackColumn(customer.notes, noteId, error.message);
+    }
+
+    if (error || !updatedNote) {
+      throw new Error(
+        error?.message || "Notities opslaan in Supabase is mislukt."
+      );
+    }
+
+    return updatedNote.id as string;
+  }
+
+  const { data: createdNote, error } = await supabase
+    .from("notes")
+    .insert({
+      customer_id: customer.id,
+      trip_id: tripId || null,
+      ...getNotePayload(customer.notes, "both")
+    })
+    .select("id")
+    .single();
+
+  if (error && isMissingNoteColumnError(error)) {
+    return createNoteWithFallbackColumn(
+      customer,
+      tripId,
+      error.message
+    );
+  }
+
+  if (error || !createdNote) {
+    throw new Error(
+      error?.message || "Notities aanmaken in Supabase is mislukt."
+    );
+  }
+
+  return createdNote.id as string;
+}
+
+async function updateNoteWithFallbackColumn(
+  notes: string,
+  noteId: string,
+  errorMessage: string
+) {
+  const supabase = createSupabaseClient();
+  const column = getAvailableNoteColumn(errorMessage);
+  const { data, error } = await supabase
+    .from("notes")
+    .update(getNotePayload(notes, column))
+    .eq("id", noteId)
+    .select("id")
+    .maybeSingle();
+
+  if (error || !data) {
+    throw new Error(error?.message || "Notities opslaan in Supabase is mislukt.");
+  }
+
+  return data.id as string;
+}
+
+async function createNoteWithFallbackColumn(
+  customer: Customer,
+  tripId: string,
+  errorMessage: string
+) {
+  const supabase = createSupabaseClient();
+  const column = getAvailableNoteColumn(errorMessage);
+  const { data, error } = await supabase
+    .from("notes")
+    .insert({
+      customer_id: customer.id,
+      trip_id: tripId || null,
+      ...getNotePayload(customer.notes, column)
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message || "Notities aanmaken in Supabase is mislukt.");
+  }
+
+  return data.id as string;
+}
+
+function getNotePayload(notes: string, column: "body" | "note" | "both") {
+  if (column === "body") {
+    return { body: notes };
+  }
+
+  if (column === "note") {
+    return { note: notes };
+  }
+
+  return {
+    body: notes,
+    note: notes
+  };
+}
+
+function isMissingNoteColumnError(error: { message: string } | null) {
+  return Boolean(error?.message.match(/column .* (body|note).* does not exist/i));
+}
+
+function getAvailableNoteColumn(errorMessage: string): "body" | "note" {
+  return errorMessage.toLowerCase().includes("body") ? "note" : "body";
+}
+
+function emptyToNull(value: string) {
+  return value || null;
 }
 
 type SectionCardProps = {
