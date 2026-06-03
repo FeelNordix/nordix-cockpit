@@ -69,21 +69,17 @@ export default function NewCustomerForm() {
       notes: form.notes.trim() || "Nog geen notities."
     };
 
-    saveCustomer(customer);
-    setSavedCustomerId(customer.id);
-
     try {
       await saveCustomerToSupabase(customer);
+      setSavedCustomerId(customer.id);
       setSuccessMessage("Aanvraag opgeslagen.");
       setIsSaving(false);
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Nieuwe aanvraag is lokaal opgeslagen, maar Supabase opslaan is mislukt.";
+      saveCustomer(customer);
+      setSavedCustomerId(customer.id);
 
       setErrorMessage(
-        message
+        "Supabase opslaan mislukt. Aanvraag is tijdelijk lokaal opgeslagen."
       );
       setIsSaving(false);
     }
