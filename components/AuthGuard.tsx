@@ -8,7 +8,7 @@ type AuthGuardProps = {
   children: React.ReactNode;
 };
 
-const publicRoutes = ["/login"];
+const publicRoutes = ["/login", "/reset-password"];
 
 export default function AuthGuard({ children }: AuthGuardProps) {
   const pathname = usePathname();

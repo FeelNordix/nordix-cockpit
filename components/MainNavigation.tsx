@@ -14,7 +14,7 @@ export default function MainNavigation() {
   const pathname = usePathname();
   const router = useRouter();
 
-  if (pathname === "/login") {
+  if (pathname === "/login" || pathname === "/reset-password") {
     return null;
   }
 
