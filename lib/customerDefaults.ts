@@ -1,6 +1,10 @@
 import type { Brand, Customer, Traveler } from "@/types/customer";
 
 export const customerDetailsDefaults = {
+  streetAddress: "",
+  postalCode: "",
+  city: "",
+  country: "",
   brand: "Feel Nordix" as Brand,
   offerNumber: "",
   quoteSent: false,

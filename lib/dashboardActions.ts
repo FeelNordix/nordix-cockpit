@@ -25,6 +25,13 @@ export function getDashboardActionGroups(
     const name = `${customer.firstName} ${customer.lastName}`;
     const href = `/customers/${customer.id}`;
 
+    if (
+      customer.status === "Geannuleerd" ||
+      customer.status === "Op reis geweest"
+    ) {
+      return;
+    }
+
     if (customer.status === "Nieuwe aanvraag") {
       newRequests.push({
         id: `${customer.id}-new-request`,

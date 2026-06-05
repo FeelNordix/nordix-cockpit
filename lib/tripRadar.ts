@@ -9,6 +9,7 @@ export type TripFilter =
   | "active"
   | "departed"
   | "completed"
+  | "cancelled"
   | "open-payments";
 
 export type TripRow = {
@@ -16,6 +17,7 @@ export type TripRow = {
   brand: string;
   tripNumber: string;
   customerName: string;
+  companyName: string;
   tripName: string;
   departureDate: string;
   returnDate: string;
@@ -30,6 +32,7 @@ export function getTripRows(customers: Customer[]) {
     brand: customer.brand,
     tripNumber: customer.tripNumber || customer.offerNumber || "-",
     customerName: `${customer.firstName} ${customer.lastName}`,
+    companyName: getCompanyName(customer.companyName),
     tripName: customer.tripName || customer.destination || "Nog te bepalen",
     departureDate: customer.departureDate,
     returnDate: customer.returnDate,
@@ -62,11 +65,15 @@ export function filterTripRows(
     }
 
     if (filter === "upcoming") {
-      return isWithinNextDays(row.departureDate, today, 30);
+      return (
+        !isClosedStatus(row.status) &&
+        isWithinNextDays(row.departureDate, today, 30)
+      );
     }
 
     if (filter === "active") {
       return (
+        !isClosedStatus(row.status) &&
         Boolean(row.departureDate) &&
         Boolean(row.returnDate) &&
         row.departureDate <= today &&
@@ -75,11 +82,20 @@ export function filterTripRows(
     }
 
     if (filter === "departed") {
-      return Boolean(row.departureDate) && row.departureDate <= today && row.status !== "Afgerond";
+      return (
+        !isClosedStatus(row.status) &&
+        Boolean(row.departureDate) &&
+        row.departureDate <= today &&
+        row.status !== "Afgerond"
+      );
     }
 
     if (filter === "completed") {
-      return row.status === "Afgerond";
+      return row.status === "Afgerond" || row.status === "Op reis geweest";
+    }
+
+    if (filter === "cancelled") {
+      return row.status === "Geannuleerd";
     }
 
     if (filter === "open-payments") {
@@ -100,11 +116,20 @@ export function searchTripRows(rows: TripRow[], query: string) {
   return rows.filter((row) => {
     return [
       row.customerName,
+      row.companyName,
       row.brand,
       row.tripNumber,
       row.tripName
     ].some((value) => value.toLowerCase().includes(normalizedQuery));
   });
+}
+
+function getCompanyName(companyName: string) {
+  const normalizedCompanyName = companyName.trim();
+
+  return normalizedCompanyName && normalizedCompanyName !== "Particulier"
+    ? normalizedCompanyName
+    : "-";
 }
 
 export function getTripStats(customers: Customer[], today = getTodayDate()) {
@@ -121,6 +146,13 @@ export function getTripStats(customers: Customer[], today = getTodayDate()) {
 
 function getTripStatus(customer: Customer) {
   const today = getTodayDate();
+
+  if (
+    customer.status === "Geannuleerd" ||
+    customer.status === "Op reis geweest"
+  ) {
+    return customer.status;
+  }
 
   if (customer.status === "Nieuwe aanvraag") {
     return "Nieuwe aanvraag";
@@ -142,7 +174,11 @@ function getTripStatus(customer: Customer) {
 }
 
 function getPaymentStatus(customer: Customer) {
-  if (customer.quoteConfirmed !== true) {
+  if (
+    customer.quoteConfirmed !== true ||
+    customer.status === "Geannuleerd" ||
+    customer.status === "Op reis geweest"
+  ) {
     return "-";
   }
 
@@ -162,7 +198,11 @@ function getPaymentStatus(customer: Customer) {
 }
 
 function getTravelDocumentsStatus(customer: Customer) {
-  if (customer.quoteConfirmed !== true) {
+  if (
+    customer.quoteConfirmed !== true ||
+    customer.status === "Geannuleerd" ||
+    customer.status === "Op reis geweest"
+  ) {
     return "-";
   }
 
@@ -175,6 +215,14 @@ function getTravelDocumentsStatus(customer: Customer) {
   }
 
   return "Nog voorbereiden";
+}
+
+function isClosedStatus(status: string) {
+  return (
+    status === "Geannuleerd" ||
+    status === "Op reis geweest" ||
+    status === "Afgerond"
+  );
 }
 
 function isWithinNextDays(dateValue: string, today: string, days: number) {

@@ -5,9 +5,18 @@ export type Customer = {
   companyName: string;
   email: string;
   phone: string;
+  streetAddress: string;
+  postalCode: string;
+  city: string;
+  country: string;
   destination: string;
   travelPeriod: string;
-  status: "Nieuwe aanvraag" | "Intake gepland" | "Reisvoorstel";
+  status:
+    | "Nieuwe aanvraag"
+    | "Intake gepland"
+    | "Reisvoorstel"
+    | "Geannuleerd"
+    | "Op reis geweest";
   notes: string;
   brand: Brand;
   offerNumber: string;

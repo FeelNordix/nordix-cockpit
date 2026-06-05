@@ -14,6 +14,10 @@ const emptyForm = {
   companyName: "",
   email: "",
   phone: "",
+  streetAddress: "",
+  postalCode: "",
+  city: "",
+  country: "",
   destination: "",
   travelPeriod: "",
   status: "Nieuwe aanvraag",
@@ -62,6 +66,10 @@ export default function NewCustomerForm() {
       companyName: form.companyName.trim() || "Particulier",
       email: form.email.trim(),
       phone: form.phone.trim() || "Nog niet ingevuld",
+      streetAddress: form.streetAddress.trim(),
+      postalCode: form.postalCode.trim(),
+      city: form.city.trim(),
+      country: form.country.trim(),
       destination: form.destination.trim() || "Nog te bepalen",
       travelPeriod: form.travelPeriod.trim() || "Nog te bepalen",
       status: form.status as Customer["status"],
@@ -108,6 +116,10 @@ export default function NewCustomerForm() {
           <TextField label="Bedrijfsnaam" value={form.companyName} onChange={(value) => updateField("companyName", value)} />
           <TextField label="E-mail" type="email" value={form.email} onChange={(value) => updateField("email", value)} required />
           <TextField label="Telefoonnummer" value={form.phone} onChange={(value) => updateField("phone", value)} />
+          <TextField label="Straat + huisnummer" value={form.streetAddress} onChange={(value) => updateField("streetAddress", value)} />
+          <TextField label="Postcode" value={form.postalCode} onChange={(value) => updateField("postalCode", value)} />
+          <TextField label="Plaats" value={form.city} onChange={(value) => updateField("city", value)} />
+          <TextField label="Land" value={form.country} onChange={(value) => updateField("country", value)} />
           <TextField label="Gewenste bestemming" value={form.destination} onChange={(value) => updateField("destination", value)} />
           <TextField label="Reisperiode" value={form.travelPeriod} onChange={(value) => updateField("travelPeriod", value)} />
 
@@ -123,6 +135,8 @@ export default function NewCustomerForm() {
               <option>Nieuwe aanvraag</option>
               <option>Intake gepland</option>
               <option>Reisvoorstel</option>
+              <option>Geannuleerd</option>
+              <option>Op reis geweest</option>
             </select>
           </label>
 
@@ -191,6 +205,10 @@ async function saveCustomerToSupabase(customer: Customer) {
       company_name: customer.companyName,
       email: customer.email,
       phone: customer.phone,
+      street_address: emptyToNull(customer.streetAddress),
+      postal_code: emptyToNull(customer.postalCode),
+      city: emptyToNull(customer.city),
+      country: emptyToNull(customer.country),
       status: customer.status
     })
     .select("id")
@@ -229,6 +247,10 @@ async function saveCustomerToSupabase(customer: Customer) {
     customerId: createdCustomer.id,
     tripId: createdTrip.id
   };
+}
+
+function emptyToNull(value: string) {
+  return value || null;
 }
 
 async function getNextOfferNumberFromSupabase() {

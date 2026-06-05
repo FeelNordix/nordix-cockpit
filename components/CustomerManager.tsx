@@ -279,7 +279,9 @@ function normalizeStatus(status: string | null): Customer["status"] {
   if (
     status === "Nieuwe aanvraag" ||
     status === "Intake gepland" ||
-    status === "Reisvoorstel"
+    status === "Reisvoorstel" ||
+    status === "Geannuleerd" ||
+    status === "Op reis geweest"
   ) {
     return status;
   }

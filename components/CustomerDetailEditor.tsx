@@ -28,6 +28,10 @@ type SupabaseCustomerRow = {
   company_name: string | null;
   email: string | null;
   phone: string | null;
+  street_address: string | null;
+  postal_code: string | null;
+  city: string | null;
+  country: string | null;
   status: Customer["status"] | string | null;
 };
 
@@ -392,6 +396,10 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
           <TextField label="Bedrijfsnaam" value={customer.companyName} onChange={(value) => updateField("companyName", value)} />
           <TextField label="E-mail" type="email" value={customer.email} onChange={(value) => updateField("email", value)} required />
           <TextField label="Telefoonnummer" value={customer.phone} onChange={(value) => updateField("phone", value)} />
+          <TextField label="Straat + huisnummer" value={customer.streetAddress} onChange={(value) => updateField("streetAddress", value)} />
+          <TextField label="Postcode" value={customer.postalCode} onChange={(value) => updateField("postalCode", value)} />
+          <TextField label="Plaats" value={customer.city} onChange={(value) => updateField("city", value)} />
+          <TextField label="Land" value={customer.country} onChange={(value) => updateField("country", value)} />
           <TextField label="Reisperiode" value={customer.travelPeriod} onChange={(value) => updateField("travelPeriod", value)} />
           <StatusField value={customer.status} onChange={(value) => updateField("status", value)} />
         </SectionCard>
@@ -409,25 +417,44 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
 
             <div className="mt-5 space-y-4">
               {customer.travelers.map((traveler) => (
-                <div
+                <details
                   key={traveler.id}
-                  className="rounded-lg border border-nordix-mist bg-nordix-snow p-4"
+                  className="group rounded-lg border border-nordix-mist bg-nordix-snow"
                 >
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <TextField label="Voornaam" value={traveler.firstName} onChange={(value) => updateTraveler(traveler.id, "firstName", value)} />
-                    <TextField label="Achternaam" value={traveler.lastName} onChange={(value) => updateTraveler(traveler.id, "lastName", value)} />
-                    <TextField label="Geboortedatum" type="date" value={traveler.birthDate} onChange={(value) => updateTraveler(traveler.id, "birthDate", value)} />
-                    <TravelerTypeField value={traveler.type} onChange={(value) => updateTraveler(traveler.id, "type", value)} />
-                    <TextareaField label="Opmerkingen" value={traveler.notes} onChange={(value) => updateTraveler(traveler.id, "notes", value)} />
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3">
+                    <span>
+                      <span className="block font-semibold text-nordix-ink">
+                        {[traveler.firstName, traveler.lastName].filter(Boolean).join(" ") || "Nieuwe reiziger"}
+                      </span>
+                      <span className="mt-1 block text-sm text-slate-600">
+                        {traveler.type === "child" ? "Kind" : "Volwassene"}
+                        {traveler.birthDate ? ` - ${traveler.birthDate}` : ""}
+                      </span>
+                    </span>
+                    <span className="text-sm font-semibold text-nordix-pine group-open:hidden">
+                      Uitklappen
+                    </span>
+                    <span className="hidden text-sm font-semibold text-nordix-pine group-open:inline">
+                      Inklappen
+                    </span>
+                  </summary>
+                  <div className="border-t border-nordix-mist p-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <TextField label="Voornaam" value={traveler.firstName} onChange={(value) => updateTraveler(traveler.id, "firstName", value)} />
+                      <TextField label="Achternaam" value={traveler.lastName} onChange={(value) => updateTraveler(traveler.id, "lastName", value)} />
+                      <TextField label="Geboortedatum" type="date" value={traveler.birthDate} onChange={(value) => updateTraveler(traveler.id, "birthDate", value)} />
+                      <TravelerTypeField value={traveler.type} onChange={(value) => updateTraveler(traveler.id, "type", value)} />
+                      <TextareaField label="Opmerkingen" value={traveler.notes} onChange={(value) => updateTraveler(traveler.id, "notes", value)} />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeTraveler(traveler.id)}
+                      className="mt-4 rounded-md border border-nordix-mist bg-white px-3 py-2 text-sm font-medium text-nordix-ink transition hover:border-nordix-fjord hover:text-nordix-pine"
+                    >
+                      Reiziger verwijderen
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => removeTraveler(traveler.id)}
-                    className="mt-4 rounded-md border border-nordix-mist bg-white px-3 py-2 text-sm font-medium text-nordix-ink transition hover:border-nordix-fjord hover:text-nordix-pine"
-                  >
-                    Reiziger verwijderen
-                  </button>
-                </div>
+                </details>
               ))}
             </div>
 
@@ -559,7 +586,7 @@ async function loadCustomerFromSupabase(id: string) {
   const supabase = createSupabaseClient();
   const { data: customer, error: customerError } = await supabase
     .from("customers")
-    .select("id,first_name,last_name,company_name,email,phone,status")
+    .select("id,first_name,last_name,company_name,email,phone,street_address,postal_code,city,country,status")
     .eq("id", id)
     .maybeSingle();
 
@@ -667,6 +694,10 @@ function mapSupabaseCustomer(
     companyName: customer.company_name || "Particulier",
     email: customer.email || "",
     phone: customer.phone || "Nog niet ingevuld",
+    streetAddress: customer.street_address || "",
+    postalCode: customer.postal_code || "",
+    city: customer.city || "",
+    country: customer.country || "",
     destination: trip?.destination || "Nog te bepalen",
     travelPeriod: trip?.travel_period || "Nog te bepalen",
     status: normalizeStatus(customer.status),
@@ -747,7 +778,9 @@ function normalizeStatus(status: string | null): Customer["status"] {
   if (
     status === "Nieuwe aanvraag" ||
     status === "Intake gepland" ||
-    status === "Reisvoorstel"
+    status === "Reisvoorstel" ||
+    status === "Geannuleerd" ||
+    status === "Op reis geweest"
   ) {
     return status;
   }
@@ -865,6 +898,10 @@ async function saveCustomerToSupabase(
       company_name: customer.companyName,
       email: customer.email,
       phone: customer.phone,
+      street_address: emptyToNull(customer.streetAddress),
+      postal_code: emptyToNull(customer.postalCode),
+      city: emptyToNull(customer.city),
+      country: emptyToNull(customer.country),
       status: customer.status
     })
     .eq("id", customer.id)
@@ -1363,6 +1400,8 @@ function StatusField({ value, onChange }: StatusFieldProps) {
         <option>Nieuwe aanvraag</option>
         <option>Intake gepland</option>
         <option>Reisvoorstel</option>
+        <option>Geannuleerd</option>
+        <option>Op reis geweest</option>
       </select>
     </label>
   );

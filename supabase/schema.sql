@@ -17,10 +17,20 @@ create table if not exists public.customers (
   company_name text,
   email text,
   phone text,
+  street_address text,
+  postal_code text,
+  city text,
+  country text,
   status text not null default 'Nieuwe aanvraag',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.customers
+add column if not exists street_address text,
+add column if not exists postal_code text,
+add column if not exists city text,
+add column if not exists country text;
 
 create table if not exists public.trips (
   id uuid primary key default gen_random_uuid(),

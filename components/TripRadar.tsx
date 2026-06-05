@@ -72,7 +72,8 @@ const filters: Array<{ label: string; value: TripFilter }> = [
   { label: "Vertrek binnen 30 dagen", value: "upcoming" },
   { label: "Reizen in uitvoering", value: "active" },
   { label: "Vertrokken", value: "departed" },
-  { label: "Afgerond", value: "completed" },
+  { label: "Op reis geweest", value: "completed" },
+  { label: "Geannuleerd", value: "cancelled" },
   { label: "Openstaande betalingen", value: "open-payments" }
 ];
 
@@ -159,7 +160,7 @@ export default function TripRadar() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               className="mt-1 w-full rounded-md border border-nordix-mist px-3 py-2 text-sm outline-none transition focus:border-nordix-fjord focus:ring-2 focus:ring-nordix-fjord/30"
-              placeholder="Klantnaam, reisnummer of reisnaam"
+              placeholder="Klantnaam, bedrijfsnaam, reisnummer of reisnaam"
             />
           </label>
 
@@ -186,13 +187,13 @@ export default function TripRadar() {
       </section>
 
       <section className="overflow-hidden rounded-lg border border-nordix-mist bg-white shadow-sm">
-        <div className="hidden grid-cols-[0.8fr_0.8fr_1fr_1.2fr_0.9fr_0.9fr_0.9fr_1fr_1fr] gap-4 border-b border-nordix-mist bg-nordix-snow px-4 py-3 text-sm font-semibold text-slate-700 lg:grid">
+        <div className="hidden grid-cols-[0.8fr_0.8fr_1fr_1fr_1.2fr_0.9fr_0.9fr_1fr_1fr] gap-4 border-b border-nordix-mist bg-nordix-snow px-4 py-3 text-sm font-semibold text-slate-700 lg:grid">
           <span>Reisnummer</span>
           <span>Merk</span>
           <span>Klantnaam</span>
+          <span>Bedrijfsnaam</span>
           <span>Reisnaam</span>
           <span>Vertrekdatum</span>
-          <span>Terugkomstdatum</span>
           <span>Status</span>
           <span>Betaling</span>
           <span>Documenten</span>
@@ -203,14 +204,14 @@ export default function TripRadar() {
             <Link
               key={row.customerId}
               href={`/customers/${row.customerId}`}
-              className="grid gap-3 px-4 py-4 text-sm transition hover:bg-nordix-snow lg:grid-cols-[0.8fr_0.8fr_1fr_1.2fr_0.9fr_0.9fr_0.9fr_1fr_1fr] lg:items-center"
+              className="grid gap-3 px-4 py-4 text-sm transition hover:bg-nordix-snow lg:grid-cols-[0.8fr_0.8fr_1fr_1fr_1.2fr_0.9fr_0.9fr_1fr_1fr] lg:items-center"
             >
               <p className="font-semibold text-nordix-pine">{row.tripNumber}</p>
               <p className="text-slate-700">{row.brand}</p>
               <p className="font-semibold text-nordix-ink">{row.customerName}</p>
+              <p className="text-slate-700">{row.companyName}</p>
               <p className="text-slate-700">{row.tripName}</p>
               <p className="text-slate-700">{row.departureDate || "-"}</p>
-              <p className="text-slate-700">{row.returnDate || "-"}</p>
               <span className="w-fit rounded-md bg-nordix-mist px-2.5 py-1 text-xs font-semibold text-nordix-ink">
                 {row.status}
               </span>
@@ -233,6 +234,7 @@ function getFilterValue(value: string | null): TripFilter {
     value === "active" ||
     value === "departed" ||
     value === "completed" ||
+    value === "cancelled" ||
     value === "open-payments"
   ) {
     return value;
@@ -402,7 +404,9 @@ function normalizeStatus(status: string | null): Customer["status"] {
   if (
     status === "Nieuwe aanvraag" ||
     status === "Intake gepland" ||
-    status === "Reisvoorstel"
+    status === "Reisvoorstel" ||
+    status === "Geannuleerd" ||
+    status === "Op reis geweest"
   ) {
     return status;
   }
