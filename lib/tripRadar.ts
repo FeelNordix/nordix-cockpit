@@ -6,6 +6,7 @@ export type TripFilter =
   | "quote"
   | "confirmed"
   | "upcoming"
+  | "active"
   | "departed"
   | "completed"
   | "open-payments";
@@ -64,6 +65,15 @@ export function filterTripRows(
       return isWithinNextDays(row.departureDate, today, 30);
     }
 
+    if (filter === "active") {
+      return (
+        Boolean(row.departureDate) &&
+        Boolean(row.returnDate) &&
+        row.departureDate <= today &&
+        row.returnDate >= today
+      );
+    }
+
     if (filter === "departed") {
       return Boolean(row.departureDate) && row.departureDate <= today && row.status !== "Afgerond";
     }
@@ -102,6 +112,8 @@ export function getTripStats(customers: Customer[], today = getTodayDate()) {
 
   return {
     upcomingWithin30Days: filterTripRows(rows, "upcoming", today).length,
+    openQuotes: filterTripRows(rows, "quote", today).length,
+    activeTrips: filterTripRows(rows, "active", today).length,
     newRequests: rows.filter((row) => row.status === "Nieuwe aanvraag").length,
     openPayments: rows.filter((row) => row.paymentStatus !== "Betaald" && row.paymentStatus !== "-").length
   };

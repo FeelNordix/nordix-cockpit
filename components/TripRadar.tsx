@@ -70,6 +70,7 @@ const filters: Array<{ label: string; value: TripFilter }> = [
   { label: "Offertefase", value: "quote" },
   { label: "Bevestigd", value: "confirmed" },
   { label: "Vertrek binnen 30 dagen", value: "upcoming" },
+  { label: "Reizen in uitvoering", value: "active" },
   { label: "Vertrokken", value: "departed" },
   { label: "Afgerond", value: "completed" },
   { label: "Openstaande betalingen", value: "open-payments" }
@@ -229,6 +230,7 @@ function getFilterValue(value: string | null): TripFilter {
     value === "quote" ||
     value === "confirmed" ||
     value === "upcoming" ||
+    value === "active" ||
     value === "departed" ||
     value === "completed" ||
     value === "open-payments"

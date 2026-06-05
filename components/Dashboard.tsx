@@ -95,16 +95,30 @@ export default function Dashboard() {
 
   const totalActions =
     actionGroups.today.length +
-    actionGroups.nextSevenDays.length +
     actionGroups.newRequests.length;
   const tripStats = useMemo(() => getTripStats(customers), [customers]);
 
-  const stats = [
-    { label: "Klanten", value: customers.length },
-    { label: "Acties vandaag", value: actionGroups.today.length },
-    { label: "Binnen 7 dagen", value: actionGroups.nextSevenDays.length },
-    { label: "Nieuwe aanvragen", value: tripStats.newRequests },
-    { label: "Openstaande betalingen", value: tripStats.openPayments }
+  const kpis = [
+    {
+      label: "Openstaande offertes",
+      value: tripStats.openQuotes,
+      href: "/trips?filter=quote"
+    },
+    {
+      label: "Openstaande betalingen",
+      value: tripStats.openPayments,
+      href: "/trips?filter=open-payments"
+    },
+    {
+      label: "Vertrek binnen 30 dagen",
+      value: tripStats.upcomingWithin30Days,
+      href: "/trips?filter=upcoming"
+    },
+    {
+      label: "Reizen in uitvoering",
+      value: tripStats.activeTrips,
+      href: "/trips?filter=active"
+    }
   ];
 
   return (
@@ -144,38 +158,31 @@ export default function Dashboard() {
             </p>
           ) : (
             <div className="space-y-6">
-              <ActionSection title="Vandaag aandacht voor" actions={actionGroups.today} />
-              <ActionSection title="Binnen 7 dagen" actions={actionGroups.nextSevenDays} />
+              <ActionSection title="Acties die uitgevoerd moeten worden" actions={actionGroups.today} />
               <ActionSection title="Nieuwe aanvragen" actions={actionGroups.newRequests} />
             </div>
           )}
         </aside>
       </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Link
-          href="/trips?filter=upcoming"
-          className="block rounded-lg border border-nordix-mist bg-white p-5 shadow-sm transition hover:border-nordix-fjord hover:shadow-md"
-        >
-          <p className="text-sm text-slate-600">Reisradar</p>
-          <h3 className="mt-2 text-xl font-semibold text-nordix-ink">
-            Vertrek binnen 30 dagen
-          </h3>
-          <p className="mt-3 text-3xl font-semibold text-nordix-pine">
-            {tripStats.upcomingWithin30Days}
-          </p>
-          <p className="mt-3 text-sm font-semibold text-nordix-pine">
-            Bekijk reizen
-          </p>
-        </Link>
-      </section>
-
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
-          <div key={stat.label} className="rounded-lg border border-nordix-mist bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-600">{stat.label}</p>
-            <p className="mt-2 text-3xl font-semibold text-nordix-ink">{stat.value}</p>
-          </div>
+        {kpis.map((kpi) => (
+          <Link
+            key={kpi.label}
+            href={kpi.href}
+            className="block rounded-lg border border-nordix-mist bg-white p-5 shadow-sm transition hover:border-nordix-fjord hover:shadow-md"
+          >
+            <p className="text-sm text-slate-600">Reisradar</p>
+            <h3 className="mt-2 text-lg font-semibold text-nordix-ink">
+              {kpi.label}
+            </h3>
+            <p className="mt-3 text-3xl font-semibold text-nordix-pine">
+              {kpi.value}
+            </p>
+            <p className="mt-3 text-sm font-semibold text-nordix-pine">
+              Bekijk overzicht
+            </p>
+          </Link>
         ))}
       </section>
     </div>
