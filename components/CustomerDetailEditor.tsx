@@ -111,6 +111,8 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [adultsOpen, setAdultsOpen] = useState(false);
+  const [childrenOpen, setChildrenOpen] = useState(false);
 
   useEffect(() => {
     setCustomer(null);
@@ -119,6 +121,8 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
     setSupabaseNoteId("");
     setSupabasePaymentIds(emptyPaymentIds);
     setDeletedSupabaseTravelerIds([]);
+    setAdultsOpen(false);
+    setChildrenOpen(false);
 
     loadCustomerFromSupabase(id)
       .then((result) => {
@@ -183,6 +187,7 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
   function addTraveler() {
     setSaved(false);
     setSaveError("");
+    setAdultsOpen(true);
     setCustomer((current) => {
       if (!current) {
         return current;
@@ -211,6 +216,15 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
   ) {
     setSaved(false);
     setSaveError("");
+
+    if (field === "type") {
+      if (value === "child") {
+        setChildrenOpen(true);
+      } else {
+        setAdultsOpen(true);
+      }
+    }
+
     setCustomer((current) => {
       if (!current) {
         return current;
@@ -315,6 +329,8 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
   const adultCount = customer.travelers.filter((traveler) => traveler.type === "adult").length;
   const childCount = customer.travelers.filter((traveler) => traveler.type === "child").length;
   const travelerCount = customer.travelers.length;
+  const adultTravelers = customer.travelers.filter((traveler) => traveler.type === "adult");
+  const childTravelers = customer.travelers.filter((traveler) => traveler.type === "child");
   const travelDocumentWarnings = getTravelDocumentDateWarnings(customer);
 
   function recalculateTravelDocumentDates() {
@@ -411,52 +427,37 @@ export default function CustomerDetailEditor({ id }: CustomerDetailEditorProps) 
             </p>
             <div className="grid gap-3 sm:grid-cols-3">
               <CountCard label="Totaal" value={travelerCount} />
-              <CountCard label="Volwassenen" value={adultCount} />
-              <CountCard label="Kinderen" value={childCount} />
+              <CountCard
+                label="Volwassenen"
+                value={adultCount}
+                open={adultsOpen}
+                onClick={() => setAdultsOpen((current) => !current)}
+              />
+              <CountCard
+                label="Kinderen"
+                value={childCount}
+                open={childrenOpen}
+                onClick={() => setChildrenOpen((current) => !current)}
+              />
             </div>
 
-            <div className="mt-5 space-y-4">
-              {customer.travelers.map((traveler) => (
-                <details
-                  key={traveler.id}
-                  className="group rounded-lg border border-nordix-mist bg-nordix-snow"
-                >
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3">
-                    <span>
-                      <span className="block font-semibold text-nordix-ink">
-                        {[traveler.firstName, traveler.lastName].filter(Boolean).join(" ") || "Nieuwe reiziger"}
-                      </span>
-                      <span className="mt-1 block text-sm text-slate-600">
-                        {traveler.type === "child" ? "Kind" : "Volwassene"}
-                        {traveler.birthDate ? ` - ${traveler.birthDate}` : ""}
-                      </span>
-                    </span>
-                    <span className="text-sm font-semibold text-nordix-pine group-open:hidden">
-                      Uitklappen
-                    </span>
-                    <span className="hidden text-sm font-semibold text-nordix-pine group-open:inline">
-                      Inklappen
-                    </span>
-                  </summary>
-                  <div className="border-t border-nordix-mist p-4">
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <TextField label="Voornaam" value={traveler.firstName} onChange={(value) => updateTraveler(traveler.id, "firstName", value)} />
-                      <TextField label="Achternaam" value={traveler.lastName} onChange={(value) => updateTraveler(traveler.id, "lastName", value)} />
-                      <TextField label="Geboortedatum" type="date" value={traveler.birthDate} onChange={(value) => updateTraveler(traveler.id, "birthDate", value)} />
-                      <TravelerTypeField value={traveler.type} onChange={(value) => updateTraveler(traveler.id, "type", value)} />
-                      <TextareaField label="Opmerkingen" value={traveler.notes} onChange={(value) => updateTraveler(traveler.id, "notes", value)} />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeTraveler(traveler.id)}
-                      className="mt-4 rounded-md border border-nordix-mist bg-white px-3 py-2 text-sm font-medium text-nordix-ink transition hover:border-nordix-fjord hover:text-nordix-pine"
-                    >
-                      Reiziger verwijderen
-                    </button>
-                  </div>
-                </details>
-              ))}
-            </div>
+            {adultsOpen ? (
+              <TravelerGroup
+                title="Volwassenen"
+                travelers={adultTravelers}
+                updateTraveler={updateTraveler}
+                removeTraveler={removeTraveler}
+              />
+            ) : null}
+
+            {childrenOpen ? (
+              <TravelerGroup
+                title="Kinderen"
+                travelers={childTravelers}
+                updateTraveler={updateTraveler}
+                removeTraveler={removeTraveler}
+              />
+            ) : null}
 
             <button
               type="button"
@@ -1299,14 +1300,107 @@ function SummaryItem({ label, value }: SummaryItemProps) {
 type CountCardProps = {
   label: string;
   value: number;
+  open?: boolean;
+  onClick?: () => void;
 };
 
-function CountCard({ label, value }: CountCardProps) {
+function CountCard({ label, value, open, onClick }: CountCardProps) {
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-expanded={open}
+        className="rounded-md border border-nordix-mist bg-white px-4 py-3 text-left transition hover:border-nordix-fjord hover:shadow-sm"
+      >
+        <p className="text-sm text-slate-600">{label}</p>
+        <div className="mt-1 flex items-end justify-between gap-3">
+          <p className="text-2xl font-semibold text-nordix-ink">{value}</p>
+          <p className="text-sm font-semibold text-nordix-pine">
+            {open ? "Inklappen" : "Bekijken"}
+          </p>
+        </div>
+      </button>
+    );
+  }
+
   return (
     <div className="rounded-md border border-nordix-mist bg-white px-4 py-3">
       <p className="text-sm text-slate-600">{label}</p>
       <p className="mt-1 text-2xl font-semibold text-nordix-ink">{value}</p>
     </div>
+  );
+}
+
+type TravelerGroupProps = {
+  title: string;
+  travelers: Traveler[];
+  updateTraveler: <Field extends keyof Traveler>(
+    travelerId: string,
+    field: Field,
+    value: Traveler[Field]
+  ) => void;
+  removeTraveler: (travelerId: string) => void;
+};
+
+function TravelerGroup({
+  title,
+  travelers,
+  updateTraveler,
+  removeTraveler
+}: TravelerGroupProps) {
+  return (
+    <section className="mt-5">
+      <h4 className="text-sm font-semibold text-nordix-ink">{title}</h4>
+      {travelers.length === 0 ? (
+        <p className="mt-3 rounded-md bg-nordix-snow px-4 py-3 text-sm text-slate-600">
+          Geen reizigers in deze groep.
+        </p>
+      ) : (
+        <div className="mt-3 space-y-3">
+          {travelers.map((traveler) => (
+            <details
+              key={traveler.id}
+              className="group rounded-lg border border-nordix-mist bg-nordix-snow"
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3">
+                <span>
+                  <span className="block font-semibold text-nordix-ink">
+                    {[traveler.firstName, traveler.lastName].filter(Boolean).join(" ") || "Nieuwe reiziger"}
+                  </span>
+                  <span className="mt-1 block text-sm text-slate-600">
+                    {traveler.type === "child" ? "Kind" : "Volwassene"}
+                    {traveler.birthDate ? ` - ${traveler.birthDate}` : ""}
+                  </span>
+                </span>
+                <span className="text-sm font-semibold text-nordix-pine group-open:hidden">
+                  Uitklappen
+                </span>
+                <span className="hidden text-sm font-semibold text-nordix-pine group-open:inline">
+                  Inklappen
+                </span>
+              </summary>
+              <div className="border-t border-nordix-mist p-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <TextField label="Voornaam" value={traveler.firstName} onChange={(value) => updateTraveler(traveler.id, "firstName", value)} />
+                  <TextField label="Achternaam" value={traveler.lastName} onChange={(value) => updateTraveler(traveler.id, "lastName", value)} />
+                  <TextField label="Geboortedatum" type="date" value={traveler.birthDate} onChange={(value) => updateTraveler(traveler.id, "birthDate", value)} />
+                  <TravelerTypeField value={traveler.type} onChange={(value) => updateTraveler(traveler.id, "type", value)} />
+                  <TextareaField label="Opmerkingen" value={traveler.notes} onChange={(value) => updateTraveler(traveler.id, "notes", value)} />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => removeTraveler(traveler.id)}
+                  className="mt-4 rounded-md border border-nordix-mist bg-white px-3 py-2 text-sm font-medium text-nordix-ink transition hover:border-nordix-fjord hover:text-nordix-pine"
+                >
+                  Reiziger verwijderen
+                </button>
+              </div>
+            </details>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
