@@ -20,21 +20,49 @@ const emptyForm = {
   country: "",
   destination: "",
   travelPeriod: "",
+  offerNumber: "",
+  tripNumber: "",
+  invoiceNumber: "",
+  tripName: "",
+  departureDate: "",
+  returnDate: "",
   status: "Nieuwe aanvraag",
   brand: "Feel Nordix",
   notes: ""
 };
 
+type EntryType = "new" | "historical";
+
 type SupabaseTripNumberRow = {
+  customer_id: string | null;
   offer_number: string | null;
   trip_number: string | null;
   invoice_number: string | null;
 };
 
+type SupabaseCustomerMatchRow = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+};
+
+class SupabaseSaveError extends Error {
+  customerCreated: boolean;
+
+  constructor(message: string, customerCreated = false) {
+    super(message);
+    this.customerCreated = customerCreated;
+  }
+}
+
 export default function NewCustomerForm() {
   const [form, setForm] = useState(emptyForm);
+  const [entryType, setEntryType] = useState<EntryType>("new");
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [warningMessage, setWarningMessage] = useState("");
+  const [matchingCustomerId, setMatchingCustomerId] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [savedCustomerId, setSavedCustomerId] = useState("");
 
@@ -42,25 +70,104 @@ export default function NewCustomerForm() {
     setForm((current) => ({ ...current, [field]: value }));
   }
 
+  function selectEntryType(value: EntryType) {
+    setEntryType(value);
+    setErrorMessage("");
+    setWarningMessage("");
+    setMatchingCustomerId("");
+    setSuccessMessage("");
+    setSavedCustomerId("");
+    setForm((current) => ({
+      ...current,
+      status: value === "historical" ? "Op reis geweest" : "Nieuwe aanvraag"
+    }));
+  }
+
   async function addCustomer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setErrorMessage("");
+    setWarningMessage("");
+    setMatchingCustomerId("");
     setSuccessMessage("");
     setSavedCustomerId("");
     setIsSaving(true);
 
-    let offerNumber = "";
+    const isHistorical = entryType === "historical";
+    const historicalNumbers = {
+      offerNumber: form.offerNumber.trim(),
+      tripNumber: form.tripNumber.trim(),
+      invoiceNumber: form.invoiceNumber.trim()
+    };
 
-    try {
-      offerNumber = await getNextOfferNumberFromSupabase();
-    } catch {
-      offerNumber = getNextOfferNumber();
+    if (
+      isHistorical &&
+      !historicalNumbers.offerNumber &&
+      !historicalNumbers.tripNumber &&
+      !historicalNumbers.invoiceNumber
+    ) {
+      setErrorMessage(
+        "Vul minimaal een offerte-, reis- of factuurnummer in voor het historische dossier."
+      );
+      setIsSaving(false);
+      return;
+    }
+
+    if (isHistorical) {
+      try {
+        const duplicateCustomerId = await findCustomerIdByHistoricalNumber(
+          historicalNumbers
+        );
+
+        if (duplicateCustomerId) {
+          setErrorMessage(
+            "Dit offerte-, reis- of factuurnummer bestaat al. Het historische dossier is niet opgeslagen."
+          );
+          setMatchingCustomerId(duplicateCustomerId);
+          setIsSaving(false);
+          return;
+        }
+
+        const customerMatch = await findMatchingCustomer(
+          form.firstName,
+          form.lastName,
+          form.email
+        );
+
+        if (customerMatch) {
+          setWarningMessage(
+            "Er bestaat al een klant met dezelfde naam en hetzelfde e-mailadres. Controleer na opslaan of dit een aparte reis hoort te zijn."
+          );
+          setMatchingCustomerId(customerMatch.id);
+        }
+      } catch {
+        setErrorMessage(
+          "De controle op bestaande historische dossiers is mislukt. Er is niets opgeslagen."
+        );
+        setIsSaving(false);
+        return;
+      }
+    }
+
+    let offerNumber = historicalNumbers.offerNumber;
+
+    if (!isHistorical) {
+      try {
+        offerNumber = await getNextOfferNumberFromSupabase();
+      } catch {
+        offerNumber = getNextOfferNumber();
+      }
     }
 
     const customer: Customer = {
       id: crypto.randomUUID(),
       ...customerDetailsDefaults,
       offerNumber,
+      tripNumber: isHistorical ? historicalNumbers.tripNumber : "",
+      invoiceNumber: isHistorical ? historicalNumbers.invoiceNumber : "",
+      tripName: isHistorical ? form.tripName.trim() : "",
+      departureDate: isHistorical ? form.departureDate : "",
+      returnDate: isHistorical ? form.returnDate : "",
+      quoteConfirmed: isHistorical,
       firstName: form.firstName.trim(),
       lastName: form.lastName.trim(),
       companyName: form.companyName.trim() || "Particulier",
@@ -80,15 +187,30 @@ export default function NewCustomerForm() {
     try {
       await saveCustomerToSupabase(customer);
       setSavedCustomerId(customer.id);
-      setSuccessMessage("Aanvraag opgeslagen.");
+      setSuccessMessage(
+        isHistorical ? "Historisch dossier opgeslagen." : "Aanvraag opgeslagen."
+      );
       setIsSaving(false);
     } catch (error) {
-      saveCustomer(customer);
-      setSavedCustomerId(customer.id);
+      const customerAlreadyCreated =
+        error instanceof SupabaseSaveError && error.customerCreated;
 
-      setErrorMessage(
-        "Supabase opslaan mislukt. Aanvraag is tijdelijk lokaal opgeslagen."
-      );
+      if (!isHistorical && !customerAlreadyCreated) {
+        saveCustomer(customer);
+        setSavedCustomerId(customer.id);
+        setErrorMessage(
+          "Supabase opslaan mislukt. Aanvraag is tijdelijk lokaal opgeslagen."
+        );
+      } else {
+        setSavedCustomerId(customerAlreadyCreated ? customer.id : "");
+        setMatchingCustomerId(customerAlreadyCreated ? customer.id : "");
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Opslaan is mislukt. Er is geen lokaal dossier aangemaakt."
+        );
+      }
+
       setIsSaving(false);
     }
   }
@@ -104,11 +226,26 @@ export default function NewCustomerForm() {
 
       <section className="rounded-lg border border-nordix-mist bg-white p-6 shadow-sm">
         <p className="text-sm font-semibold uppercase text-nordix-pine">
-          Nieuwe aanvraag
+          {entryType === "historical" ? "Historisch dossier" : "Nieuwe aanvraag"}
         </p>
         <h2 className="mt-2 text-3xl font-semibold text-nordix-ink">
-          Nieuwe klant toevoegen
+          {entryType === "historical"
+            ? "Historisch dossier toevoegen"
+            : "Nieuwe klant toevoegen"}
         </h2>
+
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          <EntryTypeButton
+            active={entryType === "new"}
+            label="Nieuwe aanvraag"
+            onClick={() => selectEntryType("new")}
+          />
+          <EntryTypeButton
+            active={entryType === "historical"}
+            label="Historisch dossier"
+            onClick={() => selectEntryType("historical")}
+          />
+        </div>
 
         <form onSubmit={addCustomer} className="mt-6 grid gap-4 md:grid-cols-2">
           <TextField label="Voornaam" value={form.firstName} onChange={(value) => updateField("firstName", value)} required />
@@ -124,6 +261,21 @@ export default function NewCustomerForm() {
           <TextField label="Reisperiode" value={form.travelPeriod} onChange={(value) => updateField("travelPeriod", value)} />
 
           <BrandField value={form.brand as Customer["brand"]} onChange={(value) => updateField("brand", value)} />
+
+          {entryType === "historical" ? (
+            <>
+              <TextField label="Offertenummer" value={form.offerNumber} onChange={(value) => updateField("offerNumber", value)} />
+              <TextField label="Reisnummer" value={form.tripNumber} onChange={(value) => updateField("tripNumber", value)} />
+              <TextField label="Factuurnummer" value={form.invoiceNumber} onChange={(value) => updateField("invoiceNumber", value)} />
+              <TextField label="Reisnaam" value={form.tripName} onChange={(value) => updateField("tripName", value)} />
+              <TextField label="Vertrekdatum" type="date" value={form.departureDate} onChange={(value) => updateField("departureDate", value)} />
+              <TextField label="Terugkomstdatum" type="date" value={form.returnDate} onChange={(value) => updateField("returnDate", value)} />
+              <p className="text-sm text-slate-600 md:col-span-2">
+                Vul minimaal een offerte-, reis- of factuurnummer in. Historische
+                datums mogen in het verleden liggen.
+              </p>
+            </>
+          ) : null}
 
           <label className="block">
             <span className="text-sm font-medium text-slate-700">Status</span>
@@ -163,6 +315,19 @@ export default function NewCustomerForm() {
                 {errorMessage}
               </p>
             ) : null}
+            {warningMessage ? (
+              <p className="mb-3 rounded-md bg-amber-50 px-3 py-2 text-sm font-medium text-amber-800">
+                {warningMessage}
+              </p>
+            ) : null}
+            {matchingCustomerId ? (
+              <Link
+                href={`/customers/${matchingCustomerId}`}
+                className="mb-3 inline-flex text-sm font-semibold text-nordix-pine transition hover:text-nordix-fjord"
+              >
+                Open bestaand klantdossier
+              </Link>
+            ) : null}
             <button
               type="submit"
               disabled={isSaving}
@@ -191,8 +356,8 @@ async function saveCustomerToSupabase(customer: Customer) {
   const hasSession = Boolean(sessionData.session);
 
   if (!hasSession) {
-    throw new Error(
-      "Nieuwe aanvraag is lokaal opgeslagen, maar er is geen actieve Supabase sessie."
+    throw new SupabaseSaveError(
+      "Opslaan is mislukt omdat er geen actieve Supabase-sessie is."
     );
   }
 
@@ -215,9 +380,8 @@ async function saveCustomerToSupabase(customer: Customer) {
     .single();
 
   if (customerError || !createdCustomer) {
-    throw new Error(
-      customerError?.message ||
-        "Nieuwe aanvraag is lokaal opgeslagen, maar customers aanmaken is mislukt."
+    throw new SupabaseSaveError(
+      "Klantgegevens aanmaken in Supabase is mislukt. Er is niets lokaal opgeslagen."
     );
   }
 
@@ -226,10 +390,14 @@ async function saveCustomerToSupabase(customer: Customer) {
     .insert({
       customer_id: createdCustomer.id,
       brand: customer.brand,
-      offer_number: customer.offerNumber,
+      offer_number: emptyToNull(customer.offerNumber),
+      trip_number: emptyToNull(customer.tripNumber),
+      invoice_number: emptyToNull(customer.invoiceNumber),
       destination: customer.destination,
       travel_period: customer.travelPeriod,
       trip_name: customer.tripName,
+      departure_date: emptyToNull(customer.departureDate),
+      return_date: emptyToNull(customer.returnDate),
       quote_sent: customer.quoteSent,
       quote_confirmed: customer.quoteConfirmed
     })
@@ -237,9 +405,9 @@ async function saveCustomerToSupabase(customer: Customer) {
     .single();
 
   if (tripError || !createdTrip) {
-    throw new Error(
-      tripError?.message ||
-        "Nieuwe aanvraag is lokaal opgeslagen, maar trips aanmaken is mislukt."
+    throw new SupabaseSaveError(
+      "De klant is aangemaakt, maar het gekoppelde reisrecord kon niet worden opgeslagen. Er is geen lokaal duplicaat aangemaakt.",
+      true
     );
   }
 
@@ -271,6 +439,85 @@ async function getNextOfferNumberFromSupabase() {
   }
 
   return getNextOfferNumberForTrips((data ?? []) as SupabaseTripNumberRow[]);
+}
+
+async function findCustomerIdByHistoricalNumber(numbers: {
+  offerNumber: string;
+  tripNumber: string;
+  invoiceNumber: string;
+}) {
+  const supabase = createSupabaseClient();
+  const { data, error } = await supabase
+    .from("trips")
+    .select("customer_id,offer_number,trip_number,invoice_number");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const values = new Set(
+    [numbers.offerNumber, numbers.tripNumber, numbers.invoiceNumber].filter(Boolean)
+  );
+  const matchingTrip = ((data ?? []) as SupabaseTripNumberRow[]).find((trip) =>
+    [trip.offer_number, trip.trip_number, trip.invoice_number].some(
+      (number) => number && values.has(number)
+    )
+  );
+
+  return matchingTrip?.customer_id || "";
+}
+
+async function findMatchingCustomer(
+  firstName: string,
+  lastName: string,
+  email: string
+) {
+  const supabase = createSupabaseClient();
+  const { data, error } = await supabase
+    .from("customers")
+    .select("id,first_name,last_name,email");
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const normalizedFirstName = normalizeMatchValue(firstName);
+  const normalizedLastName = normalizeMatchValue(lastName);
+  const normalizedEmail = normalizeMatchValue(email);
+
+  return ((data ?? []) as SupabaseCustomerMatchRow[]).find((customer) => {
+    return (
+      normalizeMatchValue(customer.first_name) === normalizedFirstName &&
+      normalizeMatchValue(customer.last_name) === normalizedLastName &&
+      normalizeMatchValue(customer.email) === normalizedEmail
+    );
+  });
+}
+
+function normalizeMatchValue(value: string | null) {
+  return (value || "").trim().toLowerCase();
+}
+
+type EntryTypeButtonProps = {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+};
+
+function EntryTypeButton({ active, label, onClick }: EntryTypeButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-md border px-4 py-3 text-left text-sm font-semibold transition ${
+        active
+          ? "border-nordix-pine bg-nordix-pine text-white"
+          : "border-nordix-mist bg-white text-nordix-ink hover:border-nordix-fjord hover:text-nordix-pine"
+      }`}
+    >
+      {label}
+    </button>
+  );
 }
 
 type BrandFieldProps = {
